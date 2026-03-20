@@ -3,7 +3,7 @@ name: Build and Deploy
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ['release/v*']
   pull_request:
     branches: [main]
 
@@ -32,8 +32,9 @@ jobs:
       - name: Set image tag
         id: tag
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          if [[ "${{ github.ref }}" == refs/tags/release/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/release/}"
+            echo "tag=${VERSION}" >> $GITHUB_OUTPUT
             echo "pr_prefix=release" >> $GITHUB_OUTPUT
           else
             echo "tag=sha-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
