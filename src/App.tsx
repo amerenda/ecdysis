@@ -1,14 +1,12 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
-import { LayoutDashboard, Settings, UserPlus, Loader2, WifiOff } from 'lucide-react'
+import { LayoutDashboard, Settings, Loader2, WifiOff } from 'lucide-react'
 import { useHealth } from './hooks/useBackend'
 import { Dashboard } from './pages/Dashboard'
 import { Setup } from './pages/Setup'
-import { Register } from './pages/Register'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/setup', label: 'Setup', icon: Settings },
-  { to: '/register', label: 'Register', icon: UserPlus },
 ]
 
 function NavBar() {
@@ -17,9 +15,9 @@ function NavBar() {
       <div className="max-w-3xl mx-auto px-4 flex items-center justify-between h-14">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center">
-            <span className="text-white text-xs font-bold">M</span>
+            <span className="text-white text-xs font-bold">E</span>
           </div>
-          <span className="font-semibold text-gray-100 text-sm">Moltbook Manager</span>
+          <span className="font-semibold text-gray-100 text-sm">Ecdysis</span>
         </div>
         <div className="flex gap-1">
           {navItems.map(({ to, label, icon: Icon }) => (
@@ -77,7 +75,6 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/setup" element={<Setup />} />
-          <Route path="/register" element={<Register />} />
         </Routes>
       </main>
     </div>

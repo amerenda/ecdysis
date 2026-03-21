@@ -1,23 +1,31 @@
-import { Cpu } from 'lucide-react'
+import { Cpu, Plus } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useAgents, useGpu } from '../hooks/useBackend'
 import { AgentCard } from '../components/AgentCard'
+
+function isCreated(a: { enabled: boolean; registered: boolean; persona: { name: string } }) {
+  return a.enabled || a.registered || a.persona.name !== 'Agent'
+}
 
 export function Dashboard() {
   const agents = useAgents()
   const gpu = useGpu()
 
-  const runningCount = agents.data?.filter(a => a.running).length ?? 0
-  const enabledCount = agents.data?.filter(a => a.enabled).length ?? 0
+  const created = agents.data?.filter(isCreated) ?? []
+  const runningCount = created.filter(a => a.running).length
+  const enabledCount = created.filter(a => a.enabled).length
 
   return (
     <div className="space-y-6">
-      {/* Status bar */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex items-center gap-3">
-        <div className={`w-2 h-2 rounded-full ${runningCount > 0 ? 'bg-green-400' : 'bg-gray-600'}`} />
-        <p className="text-sm font-medium text-gray-200">
-          {runningCount} of {enabledCount} agents active
-        </p>
-      </div>
+      {/* Status bar — only show when agents exist */}
+      {created.length > 0 && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex items-center gap-3">
+          <div className={`w-2 h-2 rounded-full ${runningCount > 0 ? 'bg-green-400' : 'bg-gray-600'}`} />
+          <p className="text-sm font-medium text-gray-200">
+            {runningCount} of {enabledCount} agents active
+          </p>
+        </div>
+      )}
 
       {/* GPU info */}
       {gpu.data && gpu.data.vram_total_gb > 0 && (
@@ -42,15 +50,26 @@ export function Dashboard() {
 
       {/* Agent cards */}
       <div className="space-y-3">
-        <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Agents</h2>
         {agents.isLoading ? (
           <div className="text-center py-8 text-gray-600">Loading agents…</div>
-        ) : agents.data?.length === 0 ? (
-          <div className="text-center py-8 text-gray-600">No agents configured yet. Go to Setup.</div>
+        ) : created.length === 0 ? (
+          <div className="text-center py-16 text-gray-600">
+            <p className="mb-4">No agents yet.</p>
+            <Link
+              to="/setup"
+              className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Create your first agent
+            </Link>
+          </div>
         ) : (
-          agents.data?.map(agent => (
-            <AgentCard key={agent.slot} agent={agent} />
-          ))
+          <>
+            <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Agents</h2>
+            {created.map(agent => (
+              <AgentCard key={agent.slot} agent={agent} />
+            ))}
+          </>
         )}
       </div>
     </div>
