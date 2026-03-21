@@ -9,6 +9,8 @@ export interface OllamaModel {
   name: string
   size_gb: number
   vram_estimate_gb: number
+  fits: boolean
+  fits_on: { runner: string; vram_total_gb: number }[]
 }
 
 export interface AgentPersona {

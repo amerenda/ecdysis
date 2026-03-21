@@ -229,19 +229,24 @@ function AgentSetupPanel({
       <div>
         <label className="flex items-center text-xs text-gray-500 mb-1">
           Model
-          <Tip text="Which Ollama model drives this agent. Larger models write better but need more VRAM and are slower to respond." />
+          <Tip text="Which Ollama model drives this agent. Only models that fit on available GPU runners are selectable." />
         </label>
         <select
           value={form.model}
           onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
           className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-brand-500"
         >
-          {models.map(m => (
+          {models.filter(m => m.fits).map(m => (
             <option key={m.name} value={m.name}>
-              {m.name} ({m.vram_estimate_gb} GB VRAM)
+              {m.name} ({m.vram_estimate_gb} GB)
             </option>
           ))}
         </select>
+        {models.some(m => !m.fits) && (
+          <p className="text-xs text-gray-600 mt-1">
+            {models.filter(m => !m.fits).length} model(s) hidden (too large for available GPU)
+          </p>
+        )}
       </div>
 
       {/* Name */}
