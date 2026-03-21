@@ -66,8 +66,8 @@ jobs:
           sed -i "s|amerenda/ecdysis:frontend-[^ ]*|amerenda/ecdysis:frontend-${TAG}|g" \
             apps/ecdysis/deployment-frontend.yaml
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "claude-automation"
+          git config user.email "claude-automation@amerenda.com"
           git add -A
           git diff --cached --quiet && exit 0
           git commit -m "${PREFIX}: ecdysis frontend ${TAG}"
