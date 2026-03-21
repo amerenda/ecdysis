@@ -87,7 +87,7 @@ jobs:
 
   notify-failure:
     if: failure()
-    needs: [test, build, deploy]
+    needs: [test, build-and-deploy]
     runs-on: ubuntu-latest
     steps:
       - name: Create GitHub Issue for build failure
