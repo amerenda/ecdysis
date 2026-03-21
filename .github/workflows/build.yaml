@@ -47,6 +47,7 @@ jobs:
           fi
 
       - name: Build and push
+        shell: bash
         env:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
