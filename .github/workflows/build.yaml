@@ -22,21 +22,15 @@ jobs:
       - run: npm install
       - run: npm run build
 
-  build:
+  build-and-deploy:
     needs: test
     if: github.event_name != 'pull_request'
     runs-on: arc-runner-set
-    outputs:
-      tag: ${{ steps.tag.outputs.tag }}
-      pr_prefix: ${{ steps.tag.outputs.pr_prefix }}
-    container:
-      image: amerenda/k3s-runners:kaniko
     steps:
       - uses: actions/checkout@v4
 
       - name: Set image tag
         id: tag
-        shell: bash
         run: |
           if [[ "$GITHUB_REF" == refs/tags/release/* ]]; then
             VERSION="${GITHUB_REF#refs/tags/release/}"
@@ -47,40 +41,22 @@ jobs:
             echo "pr_prefix=deploy" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Login to Docker Hub
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
       - name: Build and push
-        shell: bash
         env:
           TAG: ${{ steps.tag.outputs.tag }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          mkdir -p /kaniko/.docker
-          echo '{"auths":{"https://index.docker.io/v1/":{"username":"'"${DOCKERHUB_USERNAME}"'","password":"'"${DOCKERHUB_TOKEN}"'"}}}' > /kaniko/.docker/config.json
-          /kaniko/executor \
-            --context="${GITHUB_WORKSPACE}" \
-            --dockerfile=Dockerfile \
-            --destination="${IMAGE}:frontend-${TAG}" \
-            --destination="${IMAGE}:frontend-latest" \
-            --cache=true \
-            --cache-repo="${IMAGE}:cache"
-
-  deploy:
-    needs: build
-    if: github.event_name != 'pull_request'
-    runs-on: arc-runner-set
-    container:
-      image: ubuntu:22.04
-      env:
-        GITOPS_PAT: ${{ secrets.GITOPS_PAT }}
-    steps:
-      - name: Install git and curl
-        run: apt-get update && apt-get install -y git curl
+          docker build -t "${IMAGE}:frontend-${TAG}" -t "${IMAGE}:frontend-latest" .
+          docker push "${IMAGE}:frontend-${TAG}"
+          docker push "${IMAGE}:frontend-latest"
 
       - name: Raise PR to gitops
-        shell: bash
         env:
-          TAG: ${{ needs.build.outputs.tag }}
-          PREFIX: ${{ needs.build.outputs.pr_prefix }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          PREFIX: ${{ steps.tag.outputs.pr_prefix }}
+          GITOPS_PAT: ${{ secrets.GITOPS_PAT }}
         run: |
           git clone https://x-access-token:${GITOPS_PAT}@github.com/${GITOPS_REPO}.git /tmp/gitops
           cd /tmp/gitops
