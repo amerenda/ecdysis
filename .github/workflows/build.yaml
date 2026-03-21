@@ -35,6 +35,7 @@ jobs:
 
       - name: Set image tag
         id: tag
+        shell: bash
         run: |
           if [[ "$GITHUB_REF" == refs/tags/release/* ]]; then
             VERSION="${GITHUB_REF#refs/tags/release/}"
