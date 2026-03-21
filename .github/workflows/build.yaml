@@ -30,6 +30,9 @@ jobs:
       pr_prefix: ${{ steps.tag.outputs.pr_prefix }}
     container:
       image: amerenda/k3s-runners:kaniko
+      env:
+        DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -45,14 +48,6 @@ jobs:
             echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
             echo "pr_prefix=deploy" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Debug env vars
-        shell: bash
-        run: |
-          echo "DOCKERHUB_USERNAME is set: $([ -n "$DOCKERHUB_USERNAME" ] && echo YES || echo NO)"
-          echo "DOCKERHUB_TOKEN is set: $([ -n "$DOCKERHUB_TOKEN" ] && echo YES || echo NO)"
-          echo "GITOPS_PAT is set: $([ -n "$GITOPS_PAT" ] && echo YES || echo NO)"
-          env | grep -i DOCKER | sed 's/=.*/=***/'
 
       - name: Build and push
         shell: bash
@@ -76,6 +71,8 @@ jobs:
     runs-on: arc-runner-set
     container:
       image: ubuntu:22.04
+      env:
+        GITOPS_PAT: ${{ secrets.GITOPS_PAT }}
     steps:
       - name: Install git and curl
         run: apt-get update && apt-get install -y git curl
