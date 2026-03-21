@@ -31,11 +31,15 @@ jobs:
     container:
       image: gcr.io/kaniko-project/executor:v1.23.2-debug
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set image tag
+      - name: Checkout and set tag
         id: tag
         run: |
+          # Clone repo (actions/checkout needs Node.js which Kaniko image lacks)
+          git clone --depth 1 https://github.com/${GITHUB_REPOSITORY}.git /workspace
+          cd /workspace
+          git checkout ${GITHUB_SHA}
+
+          # Set image tag
           if echo "$GITHUB_REF" | grep -q "^refs/tags/release/"; then
             VERSION=$(echo "$GITHUB_REF" | sed 's|refs/tags/release/||')
             echo "tag=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -54,7 +58,7 @@ jobs:
           AUTH=$(echo -n "${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}" | base64)
           echo "{\"auths\":{\"https://index.docker.io/v1/\":{\"auth\":\"${AUTH}\"}}}" > /kaniko/.docker/config.json
           /kaniko/executor \
-            --context="${GITHUB_WORKSPACE}" \
+            --context=/workspace \
             --dockerfile=Dockerfile \
             --destination="${IMAGE}:frontend-${TAG}" \
             --destination="${IMAGE}:frontend-latest" \
@@ -70,7 +74,6 @@ jobs:
         env:
           TAG: ${{ needs.build.outputs.tag }}
           PREFIX: ${{ needs.build.outputs.pr_prefix }}
-          GH_TOKEN: ${{ env.GITOPS_PAT }}
         run: |
           git clone https://x-access-token:${GITOPS_PAT}@github.com/${GITOPS_REPO}.git /tmp/gitops
           cd /tmp/gitops
@@ -88,7 +91,6 @@ jobs:
           git commit -m "${PREFIX}: ecdysis frontend ${TAG}"
           git push origin "${BRANCH}"
 
-          # Create PR via GitHub API (gh CLI may not be available)
           curl -s -X POST \
             -H "Authorization: token ${GITOPS_PAT}" \
             -H "Accept: application/vnd.github.v3+json" \
