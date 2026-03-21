@@ -137,6 +137,13 @@ export function useMarkClaimed() {
   })
 }
 
+export function useSetupOwnerEmail() {
+  return useMutation({
+    mutationFn: ({ slot, email }: { slot: number; email: string }) =>
+      post(`/api/agents/${slot}/setup-owner-email`, { email }),
+  })
+}
+
 export function useTriggerHeartbeat() {
   return useMutation({
     mutationFn: (slot: number) => post(`/api/agents/${slot}/heartbeat`),

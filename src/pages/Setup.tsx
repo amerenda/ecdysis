@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Save, Plus, Trash2, Power, Info, AlertTriangle, HelpCircle } from 'lucide-react'
-import { useAgents, useModels, useUpdateAgent, useDeleteAgent, useGpu, useRegisterAgent } from '../hooks/useBackend'
+import { useAgents, useModels, useUpdateAgent, useDeleteAgent, useGpu, useRegisterAgent, useSetupOwnerEmail } from '../hooks/useBackend'
 import type { Agent } from '../types'
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
@@ -215,10 +215,13 @@ function AgentSetupPanel({
       {!agent.registered ? (
         <RegisterSection agent={agent} />
       ) : (
-        <div className="flex items-center gap-2 text-xs text-green-400">
-          <span className="w-2 h-2 rounded-full bg-green-400" />
-          Registered on Moltbook
-          {!agent.claimed && <span className="text-amber-400 ml-1">· Unclaimed (check Twitter DMs)</span>}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs text-green-400">
+            <span className="w-2 h-2 rounded-full bg-green-400" />
+            Registered on Moltbook
+            {!agent.claimed && <span className="text-amber-400 ml-1">· Unclaimed (check Twitter DMs)</span>}
+          </div>
+          {agent.claimed && <OwnerEmailSection agent={agent} />}
         </div>
       )}
 
@@ -540,6 +543,70 @@ function RegisterSection({ agent }: { agent: Agent }) {
           Cancel
         </button>
       </div>
+    </div>
+  )
+}
+
+// ── Owner email setup ─────────────────────────────────────────────────────
+
+function OwnerEmailSection({ agent }: { agent: Agent }) {
+  const [open, setOpen] = useState(false)
+  const [email, setEmail] = useState('')
+  const [result, setResult] = useState<string | null>(null)
+  const setupEmail = useSetupOwnerEmail()
+
+  async function handleSubmit() {
+    try {
+      await setupEmail.mutateAsync({ slot: agent.slot, email })
+      setResult('Verification email sent! Check your inbox.')
+    } catch (e: any) {
+      setResult(`Error: ${e.message}`)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="text-xs text-brand-400 hover:text-brand-300 transition-colors"
+      >
+        Set up owner email for Moltbook login
+      </button>
+    )
+  }
+
+  return (
+    <div className="border border-gray-700 rounded-lg p-3 space-y-2 bg-gray-800/40">
+      <p className="text-xs text-gray-400">
+        Link your email to manage this agent on moltbook.com. You'll receive a verification email.
+      </p>
+      <div className="flex gap-2">
+        <input
+          type="email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          placeholder="your@email.com"
+          className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-gray-100 text-sm focus:outline-none focus:border-brand-500"
+        />
+        <button
+          onClick={handleSubmit}
+          disabled={setupEmail.isPending || !email.includes('@')}
+          className="bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+        >
+          {setupEmail.isPending ? 'Sending…' : 'Send'}
+        </button>
+        <button
+          onClick={() => setOpen(false)}
+          className="text-gray-500 hover:text-gray-300 text-xs px-2 transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+      {result && (
+        <p className={`text-xs ${result.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
+          {result}
+        </p>
+      )}
     </div>
   )
 }
