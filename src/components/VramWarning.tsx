@@ -38,7 +38,7 @@ export function VramWarning({ models }: Props) {
           </p>
 
           <div className="mt-2 space-y-1">
-            {data.per_model.map(m => (
+            {data.per_model.map((m: { model: string; vram_gb: number }) => (
               <div key={m.model} className="flex items-center justify-between text-xs">
                 <span className="text-gray-500 truncate">{m.model}</span>
                 <span className="text-gray-400 ml-2 flex-shrink-0">{m.vram_gb} GB</span>

@@ -2,8 +2,9 @@ import { Cpu, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAgents, useGpu } from '../hooks/useBackend'
 import { AgentCard } from '../components/AgentCard'
+import type { Agent } from '../types'
 
-function isCreated(a: { enabled: boolean; registered: boolean; persona: { name: string } }) {
+function isCreated(a: Agent) {
   return a.enabled || a.registered || a.persona.name !== 'Agent'
 }
 
@@ -12,8 +13,8 @@ export function Dashboard() {
   const gpu = useGpu()
 
   const created = agents.data?.filter(isCreated) ?? []
-  const runningCount = created.filter(a => a.running).length
-  const enabledCount = created.filter(a => a.enabled).length
+  const runningCount = created.filter((a: Agent) => a.running).length
+  const enabledCount = created.filter((a: Agent) => a.enabled).length
 
   return (
     <div className="space-y-6">
@@ -66,7 +67,7 @@ export function Dashboard() {
         ) : (
           <>
             <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Agents</h2>
-            {created.map(agent => (
+            {created.map((agent: Agent) => (
               <AgentCard key={agent.slot} agent={agent} />
             ))}
           </>

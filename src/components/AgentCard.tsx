@@ -156,7 +156,7 @@ export function AgentCard({ agent }: Props) {
           </div>
           {activity.data && activity.data.length > 0 ? (
             <div className="max-h-48 overflow-y-auto">
-              {activity.data.map((e, i) => <ActivityRow key={i} entry={e} />)}
+              {activity.data.map((e: ActivityEntry, i: number) => <ActivityRow key={i} entry={e} />)}
             </div>
           ) : (
             <p className="text-xs text-gray-600">No activity yet</p>

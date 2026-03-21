@@ -1,10 +1,11 @@
 import { useAgents } from '../hooks/useBackend'
 import { RegistrationWizard } from '../components/RegistrationWizard'
 import { CheckCircle } from 'lucide-react'
+import type { Agent } from '../types'
 
 export function Register() {
   const agents = useAgents()
-  const enabledAgents = agents.data?.filter(a => a.enabled || a.slot <= 1) ?? []
+  const enabledAgents = agents.data?.filter((a: Agent) => a.enabled || a.slot <= 1) ?? []
 
   return (
     <div className="space-y-6">
@@ -19,7 +20,7 @@ export function Register() {
       {agents.isLoading ? (
         <div className="text-center py-8 text-gray-600">Loading agents…</div>
       ) : (
-        enabledAgents.map(agent => (
+        enabledAgents.map((agent: Agent) => (
           <div key={agent.slot} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-7 h-7 rounded-full bg-brand-900 flex items-center justify-center text-brand-300 text-sm font-bold">

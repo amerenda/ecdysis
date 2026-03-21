@@ -726,14 +726,14 @@ export function Setup() {
 
   const allAgents = agents.data ?? []
   const created = allAgents.filter(isCreated)
-  const canCreate = allAgents.some(a => !isCreated(a))
+  const canCreate = allAgents.some((a: Agent) => !isCreated(a))
 
-  const displayTab = activeTab !== null && created.some(a => a.slot === activeTab)
+  const displayTab = activeTab !== null && created.some((a: Agent) => a.slot === activeTab)
     ? activeTab
     : created[0]?.slot ?? null
 
   async function handleCreate() {
-    const next = allAgents.find(a => !isCreated(a))
+    const next = allAgents.find((a: Agent) => !isCreated(a))
     if (!next) return
     await update.mutateAsync({ slot: next.slot, data: { enabled: true } })
     setActiveTab(next.slot)
@@ -742,7 +742,7 @@ export function Setup() {
   async function handleDelete(slot: number) {
     await deleteAgent.mutateAsync(slot)
     if (displayTab === slot) {
-      const remaining = created.filter(a => a.slot !== slot)
+      const remaining = created.filter((a: Agent) => a.slot !== slot)
       setActiveTab(remaining[0]?.slot ?? null)
     }
   }
@@ -761,7 +761,7 @@ export function Setup() {
 
       {/* Tab strip */}
       <div className="flex items-center gap-1 border-b border-gray-800">
-        {created.map(agent => (
+        {created.map((agent: Agent) => (
           <button
             key={agent.slot}
             onClick={() => setActiveTab(agent.slot)}
@@ -789,7 +789,7 @@ export function Setup() {
           </button>
         )}
 
-        {created.some(a => !a.registered) && (
+        {created.some((a: Agent) => !a.registered) && (
           <button onClick={() => setRegisterAllOpen(true)}
             className="flex items-center gap-1 px-3 py-2 text-sm text-gray-500 hover:text-brand-400 transition-colors ml-auto">
             Register All
@@ -804,7 +804,7 @@ export function Setup() {
       {/* Tab content */}
       {displayTab !== null ? (
         (() => {
-          const agent = created.find(a => a.slot === displayTab)
+          const agent = created.find((a: Agent) => a.slot === displayTab)
           if (!agent) return null
           return (
             <div className="bg-gray-900 border border-gray-800 rounded-b-xl rounded-tr-xl p-5">
