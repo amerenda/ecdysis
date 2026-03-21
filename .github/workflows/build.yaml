@@ -46,15 +46,25 @@ jobs:
             echo "pr_prefix=deploy" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Docker Hub login
+        shell: bash
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          echo "Username length: ${#DOCKERHUB_USERNAME}"
+          echo "Token length: ${#DOCKERHUB_TOKEN}"
+          mkdir -p /kaniko/.docker
+          cat > /kaniko/.docker/config.json <<DOCKEREOF
+          {"auths":{"https://index.docker.io/v1/":{"username":"${DOCKERHUB_USERNAME}","password":"${DOCKERHUB_TOKEN}"}}}
+          DOCKEREOF
+          cat /kaniko/.docker/config.json | python3 -c "import json,sys; d=json.load(sys.stdin); print('Auth config valid:', bool(d.get('auths')))"
+
       - name: Build and push
         shell: bash
         env:
           TAG: ${{ steps.tag.outputs.tag }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          mkdir -p /kaniko/.docker
-          echo "{\"auths\":{\"https://index.docker.io/v1/\":{\"username\":\"${DOCKERHUB_USERNAME}\",\"password\":\"${DOCKERHUB_TOKEN}\"}}}" > /kaniko/.docker/config.json
           /kaniko/executor \
             --context="${GITHUB_WORKSPACE}" \
             --dockerfile=Dockerfile \
