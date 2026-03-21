@@ -28,14 +28,11 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       pr_prefix: ${{ steps.tag.outputs.pr_prefix }}
-    container:
-      image: amerenda/k3s-runners:kaniko
     steps:
       - uses: actions/checkout@v4
 
       - name: Set image tag
         id: tag
-        shell: bash
         run: |
           if [[ "$GITHUB_REF" == refs/tags/release/* ]]; then
             VERSION="${GITHUB_REF#refs/tags/release/}"
@@ -46,21 +43,80 @@ jobs:
             echo "pr_prefix=deploy" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build and push
-        shell: bash
+      - name: Write Docker config and context tarball
         env:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          mkdir -p /kaniko/.docker
+          # Write Docker auth config
+          mkdir -p /tmp/kaniko-build
           AUTH=$(echo -n "${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}" | base64)
-          echo "{\"auths\":{\"https://index.docker.io/v1/\":{\"auth\":\"${AUTH}\"}}}" > /kaniko/.docker/config.json
-          /kaniko/executor \
-            --context="${GITHUB_WORKSPACE}" \
-            --dockerfile=Dockerfile \
-            --destination="${IMAGE}:frontend-${TAG}" \
-            --destination="${IMAGE}:frontend-latest" \
-            --cache=true \
-            --cache-repo="${IMAGE}:cache"
+          echo "{\"auths\":{\"https://index.docker.io/v1/\":{\"auth\":\"${AUTH}\"}}}" > /tmp/kaniko-build/config.json
+
+          # Create build context tarball for Kaniko
+          tar -cf /tmp/kaniko-build/context.tar -C "${GITHUB_WORKSPACE}" .
+
+          # Write Kaniko args
+          cat > /tmp/kaniko-build/args.txt << ARGSEOF
+          --dockerfile=Dockerfile
+          --destination=${IMAGE}:frontend-${TAG}
+          --destination=${IMAGE}:frontend-latest
+          --cache=true
+          --cache-repo=${IMAGE}:cache
+          ARGSEOF
+
+      - name: Build and push with Kaniko
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          # Run Kaniko as a k8s Job using the workspace PVC
+          cat <<JOBEOF | kubectl apply -f -
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: kaniko-build-${GITHUB_SHA::7}
+            namespace: arc-runners-ecdysis
+          spec:
+            backoffLimit: 0
+            ttlSecondsAfterFinished: 60
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: kaniko
+                    image: gcr.io/kaniko-project/executor:v1.23.2
+                    args:
+                      - --context=tar:///workspace/context.tar
+                      - --dockerfile=Dockerfile
+                      - --destination=${IMAGE}:frontend-${TAG}
+                      - --destination=${IMAGE}:frontend-latest
+                      - --cache=true
+                      - --cache-repo=${IMAGE}:cache
+                    volumeMounts:
+                      - name: build-data
+                        mountPath: /workspace
+                      - name: docker-config
+                        mountPath: /kaniko/.docker
+                volumes:
+                  - name: build-data
+                    hostPath:
+                      path: /tmp/kaniko-build
+                  - name: docker-config
+                    hostPath:
+                      path: /tmp/kaniko-build
+          JOBEOF
+
+          # Wait for completion
+          kubectl wait --for=condition=complete --timeout=300s \
+            job/kaniko-build-${GITHUB_SHA::7} -n arc-runners-ecdysis || {
+            echo "=== Kaniko logs ==="
+            kubectl logs job/kaniko-build-${GITHUB_SHA::7} -n arc-runners-ecdysis
+            kubectl delete job kaniko-build-${GITHUB_SHA::7} -n arc-runners-ecdysis 2>/dev/null
+            exit 1
+          }
+
+          echo "=== Kaniko logs ==="
+          kubectl logs job/kaniko-build-${GITHUB_SHA::7} -n arc-runners-ecdysis
+          kubectl delete job kaniko-build-${GITHUB_SHA::7} -n arc-runners-ecdysis 2>/dev/null
 
   deploy:
     needs: build
