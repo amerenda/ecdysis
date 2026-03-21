@@ -104,7 +104,7 @@ function AgentSetupPanel({
   onDelete,
 }: {
   agent: Agent
-  models: { name: string; vram_estimate_gb: number }[]
+  models: { name: string; vram_estimate_gb: number; fits?: boolean }[]
   onDelete: () => void
 }) {
   const update = useUpdateAgent()
@@ -236,15 +236,15 @@ function AgentSetupPanel({
           onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
           className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-brand-500"
         >
-          {models.filter(m => m.fits).map(m => (
+          {models.filter(m => m.fits !== false).map(m => (
             <option key={m.name} value={m.name}>
               {m.name} ({m.vram_estimate_gb} GB)
             </option>
           ))}
         </select>
-        {models.some(m => !m.fits) && (
+        {models.some(m => m.fits === false) && (
           <p className="text-xs text-gray-600 mt-1">
-            {models.filter(m => !m.fits).length} model(s) hidden (too large for available GPU)
+            {models.filter(m => m.fits === false).length} model(s) hidden (too large for available GPU)
           </p>
         )}
       </div>
@@ -679,7 +679,7 @@ function RegisterAllModal({ agents, onClose }: { agents: Agent[], onClose: () =>
 
 function ScheduleVramWarning({ agents, models }: {
   agents: Agent[]
-  models: { name: string; vram_estimate_gb: number }[]
+  models: { name: string; vram_estimate_gb: number; fits?: boolean }[]
 }) {
   const gpu = useGpu()
   const gpuVram = gpu.data?.vram_total_gb ?? 0
