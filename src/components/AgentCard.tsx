@@ -23,7 +23,7 @@ const ACTION_COLORS: Record<string, string> = {
 
 function ActivityRow({ entry }: { entry: ActivityEntry }) {
   const color = ACTION_COLORS[entry.action] ?? 'text-gray-400'
-  const ts = new Date(entry.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const ts = new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   return (
     <div className="flex gap-2 text-xs py-1 border-b border-gray-800 last:border-0">
       <span className="text-gray-600 flex-shrink-0">{ts}</span>

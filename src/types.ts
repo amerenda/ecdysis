@@ -68,7 +68,7 @@ export interface Agent {
 }
 
 export interface ActivityEntry {
-  ts: string
+  created_at: string
   action: string
   detail: string
 }
