@@ -59,6 +59,7 @@ export interface Agent {
   registered: boolean
   claimed: boolean
   running: boolean
+  heartbeat_md: string
   persona: AgentPersona
   schedule: AgentSchedule
   behavior: AgentBehavior
