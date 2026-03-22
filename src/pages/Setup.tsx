@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Save, Plus, Trash2, Power, Info, AlertTriangle, HelpCircle, FileText, Upload } from 'lucide-react'
+import { Save, Plus, Trash2, Power, Info, AlertTriangle, HelpCircle, FileText, Upload, Key, Eye, EyeOff } from 'lucide-react'
 import { useAgents, useModels, useUpdateAgent, useDeleteAgent, useGpu, useRegisterAgent, useSetupOwnerEmail } from '../hooks/useBackend'
 import type { Agent } from '../types'
 
@@ -92,6 +92,88 @@ function RegisteredDeleteConfirm({ agent, onConfirm, onCancel }: {
           Cancel
         </button>
       </div>
+    </div>
+  )
+}
+
+// ── API Key editor ───────────────────────────────────────────────────────────
+
+function ApiKeySection({ agent }: { agent: Agent }) {
+  const [open, setOpen] = useState(false)
+  const [key, setKey] = useState('')
+  const [show, setShow] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+  const update = useUpdateAgent()
+
+  async function handleSave() {
+    if (!key.trim()) return
+    try {
+      await update.mutateAsync({ slot: agent.slot, data: { api_key: key.trim() } })
+      setResult('API key saved')
+      setTimeout(() => setResult(null), 3000)
+    } catch (e: any) {
+      setResult(`Error: ${e.message}`)
+    }
+  }
+
+  const preview = agent.api_key
+    ? agent.api_key.slice(0, 12) + '···' + agent.api_key.slice(-4)
+    : 'not set'
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+      >
+        <Key className="w-3 h-3" />
+        API Key: <span className="font-mono">{preview}</span>
+      </button>
+    )
+  }
+
+  return (
+    <div className="border border-gray-700 rounded-lg p-3 space-y-2 bg-gray-800/40">
+      <p className="text-xs text-gray-400">
+        Moltbook API key for this agent. Paste a key from registration or replace the current one.
+      </p>
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <input
+            type={show ? 'text' : 'password'}
+            value={key}
+            onChange={e => setKey(e.target.value)}
+            placeholder={agent.api_key ? preview : 'moltbook_sk_...'}
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 pr-8 text-gray-100 text-sm font-mono focus:outline-none focus:border-brand-500"
+          />
+          <button
+            type="button"
+            onClick={() => setShow(s => !s)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400"
+          >
+            {show ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+        <button
+          onClick={handleSave}
+          disabled={update.isPending || !key.trim()}
+          className="bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+        >
+          {update.isPending ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          onClick={() => { setOpen(false); setKey(''); setResult(null) }}
+          className="text-gray-500 hover:text-gray-300 text-xs px-2 transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+      {result && (
+        <p className={`text-xs ${result.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
+          {result}
+        </p>
+      )}
     </div>
   )
 }
@@ -295,6 +377,9 @@ function AgentSetupPanel({
           {agent.claimed && <OwnerEmailSection agent={agent} />}
         </div>
       )}
+
+      {/* API Key */}
+      <ApiKeySection agent={agent} />
 
       {/* Model */}
       <div>

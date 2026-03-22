@@ -56,6 +56,7 @@ export interface Agent {
   slot: number
   enabled: boolean
   model: string
+  api_key: string
   registered: boolean
   claimed: boolean
   running: boolean
