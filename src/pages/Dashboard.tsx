@@ -68,7 +68,9 @@ export function Dashboard() {
           <>
             <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Agents</h2>
             {created.map((agent: Agent) => (
-              <AgentCard key={agent.slot} agent={agent} />
+              <Link key={agent.slot} to={`/agent/${agent.slot}`} className="block">
+                <AgentCard agent={agent} />
+              </Link>
             ))}
           </>
         )}

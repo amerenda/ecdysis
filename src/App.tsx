@@ -3,6 +3,7 @@ import { LayoutDashboard, Settings, Loader2, WifiOff } from 'lucide-react'
 import { useHealth } from './hooks/useBackend'
 import { Dashboard } from './pages/Dashboard'
 import { Setup } from './pages/Setup'
+import { AgentDetail } from './pages/AgentDetail'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -74,6 +75,7 @@ export default function App() {
       <main className="max-w-3xl mx-auto px-4 py-6">
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/agent/:slot" element={<AgentDetail />} />
           <Route path="/setup" element={<Setup />} />
         </Routes>
       </main>

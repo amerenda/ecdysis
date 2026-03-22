@@ -47,7 +47,7 @@ export function AgentCard({ agent }: Props) {
     : 'Never'
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+    <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:border-gray-700 transition-colors cursor-pointer">
       {/* Header */}
       <div className="p-4 flex items-center gap-3">
         <div className="relative flex-shrink-0">
@@ -74,7 +74,7 @@ export function AgentCard({ agent }: Props) {
           <p className="text-xs text-gray-500 truncate">{agent.model}</p>
         </div>
 
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.preventDefault()}>
           {!agent.running ? (
             <button
               onClick={() => start.mutate(agent.slot)}

@@ -1,0 +1,547 @@
+import { useState, useRef } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import {
+  ArrowLeft, Play, Square, Zap, Users, Loader2, Settings, RefreshCw,
+  FileText, Upload, Key, Eye, EyeOff, Save, HelpCircle, ExternalLink,
+} from 'lucide-react'
+import {
+  useAgents, useAgentActivity, useModels,
+  useStartAgent, useStopAgent, useTriggerHeartbeat, useInteractWithPeers,
+  useUpdateAgent,
+} from '../hooks/useBackend'
+import type { Agent, ActivityEntry } from '../types'
+
+// ── Tooltip ──────────────────────────────────────────────────────────────────
+
+function Tip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        className="text-gray-600 hover:text-gray-400 transition-colors ml-1"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onClick={e => { e.preventDefault(); setOpen(o => !o) }}
+        aria-label="Help"
+      >
+        <HelpCircle className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-60 bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-xs text-gray-300 shadow-xl pointer-events-none block">
+          <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-700" />
+          {text}
+        </span>
+      )}
+    </span>
+  )
+}
+
+// ── Activity colors ──────────────────────────────────────────────────────────
+
+const ACTION_COLORS: Record<string, string> = {
+  posted: 'text-brand-400',
+  commented: 'text-blue-400',
+  replied: 'text-cyan-400',
+  browsed: 'text-gray-400',
+  heartbeat: 'text-green-400',
+  error: 'text-red-400',
+  dm_request_pending: 'text-amber-400',
+  dm_approved: 'text-green-400',
+  manual_post: 'text-purple-400',
+  peer_interact: 'text-violet-400',
+  thread_reply: 'text-sky-400',
+}
+
+// ── API Key inline editor ────────────────────────────────────────────────────
+
+function ApiKeyInline({ agent }: { agent: Agent }) {
+  const [editing, setEditing] = useState(false)
+  const [key, setKey] = useState('')
+  const [show, setShow] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+  const update = useUpdateAgent()
+
+  async function handleSave() {
+    if (!key.trim()) return
+    try {
+      await update.mutateAsync({ slot: agent.slot, data: { api_key: key.trim() } })
+      setResult('Saved')
+      setEditing(false)
+      setKey('')
+      setTimeout(() => setResult(null), 3000)
+    } catch (e: any) {
+      setResult(`Error: ${e.message}`)
+    }
+  }
+
+  const preview = agent.api_key
+    ? agent.api_key.slice(0, 12) + '···' + agent.api_key.slice(-4)
+    : 'not set'
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-xs text-gray-400">{preview}</span>
+        <button onClick={() => setEditing(true)} className="text-xs text-brand-400 hover:text-brand-300">
+          Change
+        </button>
+        {result && <span className="text-xs text-green-400">{result}</span>}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex gap-2 items-center">
+      <div className="relative flex-1">
+        <input
+          type={show ? 'text' : 'password'}
+          value={key}
+          onChange={e => setKey(e.target.value)}
+          placeholder="moltbook_sk_..."
+          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 pr-8 text-gray-100 text-xs font-mono focus:outline-none focus:border-brand-500"
+        />
+        <button type="button" onClick={() => setShow(s => !s)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400">
+          {show ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+        </button>
+      </div>
+      <button onClick={handleSave} disabled={update.isPending || !key.trim()}
+        className="bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-xs px-2.5 py-1.5 rounded-lg">
+        Save
+      </button>
+      <button onClick={() => { setEditing(false); setKey('') }}
+        className="text-xs text-gray-500 hover:text-gray-300">Cancel</button>
+    </div>
+  )
+}
+
+// ── Heartbeat.md editor ──────────────────────────────────────────────────────
+
+function HeartbeatEditor({ agent }: { agent: Agent }) {
+  const [value, setValue] = useState(agent.heartbeat_md || '')
+  const [saved, setSaved] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const update = useUpdateAgent()
+
+  function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => { if (typeof reader.result === 'string') setValue(reader.result) }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
+  async function handleSave() {
+    await update.mutateAsync({ slot: agent.slot, data: { heartbeat_md: value } })
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  return (
+    <div className="space-y-2">
+      <textarea
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        rows={14}
+        spellCheck={false}
+        placeholder="# Heartbeat Instructions&#10;&#10;Paste your heartbeat.md content here..."
+        className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm font-mono focus:outline-none focus:border-brand-500 resize-y leading-relaxed"
+      />
+      <div className="flex items-center gap-2">
+        <button onClick={handleSave} disabled={update.isPending}
+          className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
+          <Save className="w-3.5 h-3.5" />
+          {saved ? 'Saved!' : update.isPending ? 'Saving…' : 'Save heartbeat.md'}
+        </button>
+        <button type="button" onClick={() => fileRef.current?.click()}
+          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-brand-400 border border-gray-700 hover:border-brand-600 rounded-lg px-2.5 py-1.5 transition-colors">
+          <Upload className="w-3.5 h-3.5" />
+          Upload .md
+        </button>
+        {value && (
+          <button type="button" onClick={() => setValue('')}
+            className="text-xs text-gray-600 hover:text-red-400 transition-colors">Clear</button>
+        )}
+        <span className="text-xs text-gray-600 ml-auto">{value.length} chars</span>
+        <input ref={fileRef} type="file" accept=".md,.txt,.markdown" onChange={handleUpload} className="hidden" />
+      </div>
+    </div>
+  )
+}
+
+// ── Inline config editor ─────────────────────────────────────────────────────
+
+function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string; vram_estimate_gb: number; fits?: boolean }[] }) {
+  const update = useUpdateAgent()
+  const [form, setForm] = useState({
+    model: agent.model,
+    name: agent.persona.name,
+    description: agent.persona.description,
+    tone: agent.persona.tone,
+    topics: agent.persona.topics.join(', '),
+    post_interval_minutes: agent.schedule.post_interval_minutes,
+    active_hours_start: agent.schedule.active_hours_start,
+    active_hours_end: agent.schedule.active_hours_end,
+    max_post_length: agent.behavior.max_post_length,
+    auto_reply: agent.behavior.auto_reply,
+    auto_like: agent.behavior.auto_like,
+    reply_to_own_threads: agent.behavior.reply_to_own_threads,
+    post_jitter_pct: agent.behavior.post_jitter_pct,
+    karma_throttle: agent.behavior.karma_throttle,
+    karma_throttle_threshold: agent.behavior.karma_throttle_threshold,
+    karma_throttle_multiplier: agent.behavior.karma_throttle_multiplier,
+    target_submolts: agent.behavior.target_submolts.join(', '),
+    auto_dm_approve: agent.behavior.auto_dm_approve,
+    send_peer_likes: agent.behavior.send_peer_likes,
+    send_peer_comments: agent.behavior.send_peer_comments,
+    receive_peer_likes: agent.behavior.receive_peer_likes,
+    receive_peer_comments: agent.behavior.receive_peer_comments,
+  })
+  const [saved, setSaved] = useState(false)
+
+  async function handleSave() {
+    await update.mutateAsync({
+      slot: agent.slot,
+      data: {
+        model: form.model,
+        persona: {
+          name: form.name,
+          description: form.description,
+          tone: form.tone,
+          topics: form.topics.split(',').map(t => t.trim()).filter(Boolean),
+        },
+        schedule: {
+          post_interval_minutes: form.post_interval_minutes,
+          active_hours_start: form.active_hours_start,
+          active_hours_end: form.active_hours_end,
+        },
+        behavior: {
+          max_post_length: form.max_post_length,
+          auto_reply: form.auto_reply,
+          auto_like: form.auto_like,
+          reply_to_own_threads: form.reply_to_own_threads,
+          post_jitter_pct: form.post_jitter_pct,
+          karma_throttle: form.karma_throttle,
+          karma_throttle_threshold: form.karma_throttle_threshold,
+          karma_throttle_multiplier: form.karma_throttle_multiplier,
+          target_submolts: form.target_submolts.split(',').map((s: string) => s.trim()).filter(Boolean),
+          auto_dm_approve: form.auto_dm_approve,
+          send_peer_likes: form.send_peer_likes,
+          send_peer_comments: form.send_peer_comments,
+          receive_peer_likes: form.receive_peer_likes,
+          receive_peer_comments: form.receive_peer_comments,
+        },
+      },
+    })
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const inputCls = "w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-brand-500"
+
+  return (
+    <div className="space-y-4">
+      {/* Model */}
+      <div>
+        <label className="flex items-center text-xs text-gray-500 mb-1">Model</label>
+        <select value={form.model} onChange={e => setForm(f => ({ ...f, model: e.target.value }))} className={inputCls}>
+          {models.filter(m => m.fits !== false).map(m => (
+            <option key={m.name} value={m.name}>{m.name} ({m.vram_estimate_gb} GB)</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Persona */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">Username</label>
+          <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputCls} />
+        </div>
+        <div>
+          <label className="flex items-center text-xs text-gray-500 mb-1">Tone <Tip text="Style instruction for the LLM system prompt." /></label>
+          <input value={form.tone} onChange={e => setForm(f => ({ ...f, tone: e.target.value }))} className={inputCls} />
+        </div>
+      </div>
+      <div>
+        <label className="text-xs text-gray-500 mb-1 block">Bio</label>
+        <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} className={inputCls + ' resize-none'} />
+      </div>
+      <div>
+        <label className="text-xs text-gray-500 mb-1 block">Topics</label>
+        <input value={form.topics} onChange={e => setForm(f => ({ ...f, topics: e.target.value }))} placeholder="technology, coffee" className={inputCls} />
+      </div>
+
+      {/* Schedule */}
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <label className="flex items-center text-xs text-gray-500 mb-1">Post every (min) <Tip text="Minimum time between posts." /></label>
+          <input type="number" min={30} value={form.post_interval_minutes} onChange={e => setForm(f => ({ ...f, post_interval_minutes: +e.target.value }))} className={inputCls} />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">Active from (h)</label>
+          <input type="number" min={0} max={23} value={form.active_hours_start} onChange={e => setForm(f => ({ ...f, active_hours_start: +e.target.value }))} className={inputCls} />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">Active until (h)</label>
+          <input type="number" min={1} max={24} value={form.active_hours_end} onChange={e => setForm(f => ({ ...f, active_hours_end: +e.target.value }))} className={inputCls} />
+        </div>
+      </div>
+
+      {/* Jitter */}
+      <div>
+        <label className="text-xs text-gray-500 mb-1 block">Post jitter ({form.post_jitter_pct}%)</label>
+        <input type="range" min={0} max={50} step={5} value={form.post_jitter_pct}
+          onChange={e => setForm(f => ({ ...f, post_jitter_pct: +e.target.value }))} className="w-full accent-brand-500" />
+      </div>
+
+      {/* Target submolts */}
+      <div>
+        <label className="flex items-center text-xs text-gray-500 mb-1">Target submolts <Tip text="Communities to post in. Leave blank to derive from topics." /></label>
+        <input value={form.target_submolts} onChange={e => setForm(f => ({ ...f, target_submolts: e.target.value }))} placeholder="technology, science" className={inputCls} />
+      </div>
+
+      {/* Behavior toggles */}
+      <div className="flex flex-wrap gap-x-4 gap-y-2">
+        {([
+          ['auto_reply', 'Auto-reply'],
+          ['auto_like', 'Auto-like'],
+          ['reply_to_own_threads', 'Extend threads'],
+          ['auto_dm_approve', 'Auto-approve DMs'],
+          ['karma_throttle', 'Karma throttle'],
+          ['send_peer_likes', 'Send peer likes'],
+          ['send_peer_comments', 'Send peer comments'],
+          ['receive_peer_likes', 'Track peer likes'],
+          ['receive_peer_comments', 'Reply to peer comments'],
+        ] as const).map(([key, label]) => (
+          <label key={key} className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+            <input type="checkbox" checked={(form as any)[key]}
+              onChange={e => setForm(f => ({ ...f, [key]: e.target.checked }))}
+              className="accent-brand-500" />
+            {label}
+          </label>
+        ))}
+      </div>
+
+      {/* Karma throttle detail */}
+      {form.karma_throttle && (
+        <div className="grid grid-cols-2 gap-3 pl-4 border-l-2 border-gray-700">
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">Throttle below karma</label>
+            <input type="number" min={0} value={form.karma_throttle_threshold}
+              onChange={e => setForm(f => ({ ...f, karma_throttle_threshold: +e.target.value }))} className={inputCls} />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">Interval multiplier</label>
+            <input type="number" min={1} max={10} step={0.5} value={form.karma_throttle_multiplier}
+              onChange={e => setForm(f => ({ ...f, karma_throttle_multiplier: +e.target.value }))} className={inputCls} />
+          </div>
+        </div>
+      )}
+
+      <button onClick={handleSave} disabled={update.isPending}
+        className="flex items-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+        <Save className="w-4 h-4" />
+        {saved ? 'Saved!' : update.isPending ? 'Saving…' : 'Save Config'}
+      </button>
+    </div>
+  )
+}
+
+// ── Main detail page ─────────────────────────────────────────────────────────
+
+export function AgentDetail() {
+  const { slot } = useParams<{ slot: string }>()
+  const slotNum = Number(slot)
+  const agents = useAgents()
+  const activity = useAgentActivity(slotNum, true)
+  const models = useModels()
+  const start = useStartAgent()
+  const stop = useStopAgent()
+  const heartbeat = useTriggerHeartbeat()
+  const interactPeers = useInteractWithPeers()
+
+  const [tab, setTab] = useState<'activity' | 'config' | 'heartbeat'>('activity')
+
+  const agent = agents.data?.find((a: Agent) => a.slot === slotNum)
+
+  if (agents.isLoading) {
+    return <div className="text-center py-12 text-gray-600">Loading…</div>
+  }
+  if (!agent) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-400 mb-4">Agent not found</p>
+        <Link to="/" className="text-brand-400 hover:text-brand-300 text-sm">Back to dashboard</Link>
+      </div>
+    )
+  }
+
+  const statusColor = agent.running ? 'bg-green-400' : 'bg-gray-600'
+  const statusText = agent.running ? 'Running' : agent.enabled ? 'Stopped' : 'Inactive'
+  const lastBeat = agent.state.last_heartbeat
+    ? new Date(agent.state.last_heartbeat).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : 'Never'
+
+  const moltbookProfileUrl = agent.registered
+    ? `https://www.moltbook.com/u/${agent.persona.name}`
+    : null
+
+  return (
+    <div className="space-y-6">
+      {/* Back + header */}
+      <div>
+        <Link to="/" className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-300 transition-colors mb-4">
+          <ArrowLeft className="w-4 h-4" /> Dashboard
+        </Link>
+
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="w-14 h-14 rounded-full bg-brand-900 flex items-center justify-center text-brand-300 text-xl font-bold">
+                {agent.slot}
+              </div>
+              <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-gray-950 ${statusColor}`} />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold text-gray-100">{agent.persona.name}</h1>
+              <p className="text-sm text-gray-500">{agent.model} · {statusText}</p>
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="flex items-center gap-2">
+            {!agent.running ? (
+              <button onClick={() => start.mutate(agent.slot)} disabled={!agent.registered || start.isPending}
+                className="flex items-center gap-1.5 bg-green-900/50 hover:bg-green-800/50 disabled:opacity-30 text-green-400 text-sm px-3 py-1.5 rounded-lg transition-colors">
+                {start.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                Start
+              </button>
+            ) : (
+              <>
+                <button onClick={() => heartbeat.mutate(agent.slot)} disabled={heartbeat.isPending}
+                  title="Trigger heartbeat" className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors">
+                  {heartbeat.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                </button>
+                <button onClick={() => interactPeers.mutate(agent.slot)} disabled={interactPeers.isPending}
+                  title="Interact with peers" className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors">
+                  {interactPeers.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+                </button>
+                <button onClick={() => stop.mutate(agent.slot)} disabled={stop.isPending}
+                  className="flex items-center gap-1.5 bg-red-900/50 hover:bg-red-800/50 text-red-400 text-sm px-3 py-1.5 rounded-lg transition-colors">
+                  {stop.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4" />}
+                  Stop
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Stats + links */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+          <div>
+            <p className="text-xs text-gray-500">Karma</p>
+            <p className="text-lg font-semibold text-gray-200">{agent.state.karma}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Last heartbeat</p>
+            <p className="text-sm font-medium text-gray-200">{lastBeat}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Pending DMs</p>
+            <p className={`text-lg font-semibold ${agent.state.pending_dm_requests.length > 0 ? 'text-amber-400' : 'text-gray-200'}`}>
+              {agent.state.pending_dm_requests.length}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Registration</p>
+            <p className="text-sm font-medium">
+              {agent.registered
+                ? <span className="text-green-400">{agent.claimed ? 'Claimed' : 'Unclaimed'}</span>
+                : <span className="text-gray-500">Not registered</span>}
+            </p>
+          </div>
+        </div>
+
+        {/* Links row */}
+        <div className="flex flex-wrap gap-3 border-t border-gray-800 pt-3">
+          {moltbookProfileUrl && (
+            <a href={moltbookProfileUrl} target="_blank" rel="noreferrer"
+              className="flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300 transition-colors">
+              <ExternalLink className="w-3 h-3" /> Moltbook Profile
+            </a>
+          )}
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <Key className="w-3 h-3" />
+            <ApiKeyInline agent={agent} />
+          </div>
+        </div>
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-1 border-b border-gray-800">
+        {([
+          ['activity', 'Activity'],
+          ['config', 'Config'],
+          ['heartbeat', 'Heartbeat.md'],
+        ] as const).map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)}
+            className={`px-4 py-2 text-sm font-medium -mb-px transition-colors ${
+              tab === id
+                ? 'border-b-2 border-brand-500 text-gray-100'
+                : 'text-gray-500 hover:text-gray-300'
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        {tab === 'activity' && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-gray-400">Recent Activity</h3>
+              {activity.isFetching && <RefreshCw className="w-3.5 h-3.5 text-gray-600 animate-spin" />}
+            </div>
+            {activity.data && activity.data.length > 0 ? (
+              <div className="space-y-0 max-h-[32rem] overflow-y-auto">
+                {activity.data.map((e: ActivityEntry, i: number) => {
+                  const color = ACTION_COLORS[e.action] ?? 'text-gray-400'
+                  const ts = new Date(e.created_at).toLocaleString([], {
+                    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+                  })
+                  return (
+                    <div key={i} className="flex gap-3 text-xs py-2 border-b border-gray-800 last:border-0">
+                      <span className="text-gray-600 flex-shrink-0 w-32">{ts}</span>
+                      <span className={`${color} flex-shrink-0 w-28`}>{e.action}</span>
+                      <span className="text-gray-400">{e.detail}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-600 py-4 text-center">No activity yet. Start the agent and trigger a heartbeat.</p>
+            )}
+          </div>
+        )}
+
+        {tab === 'config' && models.data && (
+          <ConfigEditor agent={agent} models={models.data} />
+        )}
+
+        {tab === 'heartbeat' && (
+          <div>
+            <p className="text-xs text-gray-500 mb-3">
+              The heartbeat file gives your agent actions and direction during each heartbeat cycle.
+            </p>
+            <HeartbeatEditor agent={agent} />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
