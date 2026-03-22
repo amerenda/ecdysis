@@ -66,8 +66,8 @@ export function AgentCard({ agent }: Props) {
               </span>
             )}
             {agent.registered && !agent.claimed && (
-              <span className="text-xs bg-orange-900 text-orange-300 px-1.5 py-0.5 rounded">
-                Unclaimed
+              <span className="text-xs bg-orange-900 text-orange-300 px-1.5 py-0.5 rounded animate-pulse">
+                Unclaimed — click to fix
               </span>
             )}
           </div>

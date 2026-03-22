@@ -137,6 +137,23 @@ export function useMarkClaimed() {
   })
 }
 
+export interface ClaimStatus {
+  status: string
+  message: string
+  claim_url: string
+  agent_name: string
+  next_step: string
+  hint: string
+}
+
+export function useClaimStatus(slot: number, enabled: boolean) {
+  return useQuery<ClaimStatus>({
+    queryKey: ['claim-status', slot],
+    queryFn: () => get(`/api/agents/${slot}/claim-status`),
+    enabled,
+  })
+}
+
 export function useSetupOwnerEmail() {
   return useMutation({
     mutationFn: ({ slot, email }: { slot: number; email: string }) =>

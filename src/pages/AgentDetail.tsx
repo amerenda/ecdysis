@@ -7,7 +7,7 @@ import {
 import {
   useAgents, useAgentActivity, useModels,
   useStartAgent, useStopAgent, useTriggerHeartbeat, useInteractWithPeers,
-  useUpdateAgent,
+  useUpdateAgent, useClaimStatus,
 } from '../hooks/useBackend'
 import type { Agent, ActivityEntry } from '../types'
 
@@ -349,6 +349,86 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
   )
 }
 
+// ── Claim flow guidance ──────────────────────────────────────────────────────
+
+function ClaimFlowSection({ slot, onDone }: { slot: number; onDone: () => void }) {
+  const claim = useClaimStatus(slot, true)
+  const data = claim.data
+
+  if (claim.isLoading) {
+    return (
+      <div className="border-t border-gray-800 pt-3 mt-3">
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking claim status with Moltbook…
+        </div>
+      </div>
+    )
+  }
+
+  if (!data || data.status === 'error') {
+    return (
+      <div className="border-t border-gray-800 pt-3 mt-3">
+        <p className="text-xs text-red-400">{data?.message || 'Failed to check claim status'}</p>
+        <button onClick={onDone} className="text-xs text-gray-500 hover:text-gray-300 mt-2">Dismiss</button>
+      </div>
+    )
+  }
+
+  if (data.status === 'claimed') {
+    return (
+      <div className="border-t border-gray-800 pt-3 mt-3">
+        <div className="flex items-center gap-2 text-xs text-green-400">
+          <span className="w-2 h-2 rounded-full bg-green-400" />
+          {data.message || 'Agent is claimed!'}
+        </div>
+        <p className="text-xs text-gray-500 mt-1">Local status updated automatically.</p>
+        <button onClick={onDone} className="text-xs text-brand-400 hover:text-brand-300 mt-2">Done</button>
+      </div>
+    )
+  }
+
+  // pending_claim or not_registered
+  return (
+    <div className="border-t border-gray-800 pt-3 mt-3 space-y-3">
+      <p className="text-sm font-medium text-amber-300">Claim your agent</p>
+      <p className="text-xs text-gray-400">{data.message}</p>
+
+      {data.claim_url && (
+        <div className="space-y-2">
+          <p className="text-xs text-gray-500">Step 1: Open the claim link and follow the instructions</p>
+          <a
+            href={data.claim_url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 text-sm text-brand-400 hover:text-brand-300 bg-brand-950 border border-brand-800 rounded-lg px-3 py-2 transition-colors"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Claim {data.agent_name || 'agent'} on Moltbook
+          </a>
+          {data.next_step && (
+            <p className="text-xs text-gray-500">Step 2: {data.next_step}</p>
+          )}
+          {data.hint && (
+            <p className="text-xs text-gray-600 italic">{data.hint}</p>
+          )}
+        </div>
+      )}
+
+      {data.status === 'not_registered' && (
+        <p className="text-xs text-gray-500">Register the agent first in the Config tab, then come back here.</p>
+      )}
+
+      <div className="flex gap-2">
+        <button onClick={() => claim.refetch()} disabled={claim.isFetching}
+          className="text-xs text-brand-400 hover:text-brand-300 transition-colors">
+          {claim.isFetching ? 'Checking…' : 'Re-check status'}
+        </button>
+        <button onClick={onDone} className="text-xs text-gray-500 hover:text-gray-300">Dismiss</button>
+      </div>
+    </div>
+  )
+}
+
 // ── Main detail page ─────────────────────────────────────────────────────────
 
 export function AgentDetail() {
@@ -363,6 +443,7 @@ export function AgentDetail() {
   const interactPeers = useInteractWithPeers()
 
   const [tab, setTab] = useState<'activity' | 'config' | 'heartbeat'>('activity')
+  const [showClaim, setShowClaim] = useState(false)
 
   const agent = agents.data?.find((a: Agent) => a.slot === slotNum)
 
@@ -460,11 +541,20 @@ export function AgentDetail() {
             <p className="text-xs text-gray-500">Registration</p>
             <p className="text-sm font-medium">
               {agent.registered
-                ? <span className="text-green-400">{agent.claimed ? 'Claimed' : 'Unclaimed'}</span>
+                ? agent.claimed
+                  ? <span className="text-green-400">Claimed</span>
+                  : <button onClick={() => setShowClaim(true)} className="text-amber-400 hover:text-amber-300 underline underline-offset-2 cursor-pointer">
+                      Unclaimed — fix
+                    </button>
                 : <span className="text-gray-500">Not registered</span>}
             </p>
           </div>
         </div>
+
+        {/* Claim flow guidance */}
+        {showClaim && agent.registered && !agent.claimed && (
+          <ClaimFlowSection slot={agent.slot} onDone={() => setShowClaim(false)} />
+        )}
 
         {/* Links row */}
         <div className="flex flex-wrap gap-3 border-t border-gray-800 pt-3">
