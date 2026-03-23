@@ -360,7 +360,12 @@ class AgentRunner:
             upvoted = commented = 0
             peer_upvoted = 0
             peer_db = await self._load_peer_db()
-            peer_names = set(peer_db.peers.keys())
+            # Peers = other registered agents on this ecdysis instance
+            all_configs = await db.get_all_moltbook_configs(self.pool)
+            peer_names = set(
+                c["name"] for c in all_configs
+                if c["registered"] and c["name"] != own_name
+            )
             for post in feed.get("posts", []):
                 pid = post.get("id")
                 if not pid:
