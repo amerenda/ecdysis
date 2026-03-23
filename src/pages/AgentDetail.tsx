@@ -1,12 +1,13 @@
 import { useState, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
-  ArrowLeft, Play, Square, Zap, Users, Loader2, Settings, RefreshCw,
+  ArrowLeft, Play, Square, Pause, Zap, Users, Loader2, Settings, RefreshCw,
   FileText, Upload, Key, Eye, EyeOff, Save, HelpCircle, ExternalLink, Filter,
 } from 'lucide-react'
 import {
   useAgents, useAgentActivity, useModels,
-  useStartAgent, useStopAgent, useTriggerHeartbeat, useInteractWithPeers,
+  useStartAgent, useStopAgent, usePauseAgent, useResumeAgent,
+  useTriggerHeartbeat, useInteractWithPeers,
   useUpdateAgent, useClaimStatus, useCompactMemory,
 } from '../hooks/useBackend'
 import type { Agent, ActivityEntry } from '../types'
@@ -51,6 +52,9 @@ const ACTION_COLORS: Record<string, string> = {
   manual_post: 'text-purple-400',
   peer_interact: 'text-violet-400',
   thread_reply: 'text-sky-400',
+  paused: 'text-amber-400',
+  resumed: 'text-green-400',
+  memory: 'text-indigo-400',
   skipped_reply: 'text-gray-600',
   skipped_comment: 'text-gray-600',
   skipped_thread: 'text-gray-600',
@@ -627,6 +631,8 @@ export function AgentDetail() {
   const models = useModels()
   const start = useStartAgent()
   const stop = useStopAgent()
+  const pauseAgent = usePauseAgent()
+  const resumeAgent = useResumeAgent()
   const heartbeat = useTriggerHeartbeat()
   const interactPeers = useInteractWithPeers()
 
@@ -648,8 +654,8 @@ export function AgentDetail() {
     )
   }
 
-  const statusColor = agent.running ? 'bg-green-400' : 'bg-gray-600'
-  const statusText = agent.running ? 'Running' : agent.enabled ? 'Stopped' : 'Inactive'
+  const statusColor = agent.paused ? 'bg-amber-400' : agent.running ? 'bg-green-400' : 'bg-gray-600'
+  const statusText = agent.paused ? 'Paused' : agent.running ? 'Running' : agent.enabled ? 'Stopped' : 'Inactive'
   const lastBeat = agent.state.last_heartbeat
     ? new Date(agent.state.last_heartbeat).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     : 'Never'
@@ -690,14 +696,27 @@ export function AgentDetail() {
               </button>
             ) : (
               <>
-                <button onClick={() => heartbeat.mutate(agent.slot)} disabled={heartbeat.isPending}
-                  title="Trigger heartbeat" className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors">
+                <button onClick={() => heartbeat.mutate(agent.slot)} disabled={heartbeat.isPending || agent.paused}
+                  title="Trigger heartbeat" className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors disabled:opacity-30">
                   {heartbeat.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                 </button>
-                <button onClick={() => interactPeers.mutate(agent.slot)} disabled={interactPeers.isPending}
-                  title="Interact with peers" className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors">
+                <button onClick={() => interactPeers.mutate(agent.slot)} disabled={interactPeers.isPending || agent.paused}
+                  title="Interact with peers" className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors disabled:opacity-30">
                   {interactPeers.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
                 </button>
+                {agent.paused ? (
+                  <button onClick={() => resumeAgent.mutate(agent.slot)} disabled={resumeAgent.isPending}
+                    className="flex items-center gap-1.5 bg-green-900/50 hover:bg-green-800/50 text-green-400 text-sm px-3 py-1.5 rounded-lg transition-colors">
+                    {resumeAgent.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                    Resume
+                  </button>
+                ) : (
+                  <button onClick={() => pauseAgent.mutate(agent.slot)} disabled={pauseAgent.isPending}
+                    className="flex items-center gap-1.5 bg-amber-900/50 hover:bg-amber-800/50 text-amber-400 text-sm px-3 py-1.5 rounded-lg transition-colors">
+                    {pauseAgent.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pause className="w-4 h-4" />}
+                    Pause
+                  </button>
+                )}
                 <button onClick={() => stop.mutate(agent.slot)} disabled={stop.isPending}
                   className="flex items-center gap-1.5 bg-red-900/50 hover:bg-red-800/50 text-red-400 text-sm px-3 py-1.5 rounded-lg transition-colors">
                   {stop.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4" />}

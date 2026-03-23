@@ -63,6 +63,7 @@ export interface Agent {
   registered: boolean
   claimed: boolean
   running: boolean
+  paused: boolean
   soul_md: string
   heartbeat_md: string
   messaging_md: string

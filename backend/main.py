@@ -199,6 +199,7 @@ async def get_moltbook_agents():
             "claimed": row["claimed"],
             "llm_runner_id": row.get("llm_runner_id"),
             "running": row["slot"] in runners and runners[row["slot"]].running,
+            "paused": row["slot"] in runners and runners[row["slot"]].paused,
             "soul_md": row.get("soul_md", ""),
             "heartbeat_md": row.get("heartbeat_md", ""),
             "messaging_md": row.get("messaging_md", ""),
@@ -376,6 +377,24 @@ async def stop_moltbook_agent(slot: int):
         )
     await db.upsert_moltbook_config(pool, slot, enabled=False)
     return {"ok": True, "message": f"Agent {slot} stopped"}
+
+
+@app.post("/api/agents/{slot}/pause")
+async def pause_agent(slot: int):
+    if slot not in runners:
+        raise HTTPException(status_code=400, detail="Agent not running")
+    runners[slot].paused = True
+    await db.append_moltbook_activity(app.state.db, slot, "paused", "Agent paused by user")
+    return {"ok": True, "message": f"Agent {slot} paused"}
+
+
+@app.post("/api/agents/{slot}/resume")
+async def resume_agent(slot: int):
+    if slot not in runners:
+        raise HTTPException(status_code=400, detail="Agent not running")
+    runners[slot].paused = False
+    await db.append_moltbook_activity(app.state.db, slot, "resumed", "Agent resumed by user")
+    return {"ok": True, "message": f"Agent {slot} resumed"}
 
 
 @app.post("/api/agents/{slot}/heartbeat")

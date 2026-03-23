@@ -41,6 +41,7 @@ class AgentRunner:
         self.state: AgentState = AgentState(slot=self.slot)
         self._task: asyncio.Task | None = None
         self.running = False
+        self.paused = False
         self._lock_conn = lock_conn
         self._psk = psk
 
@@ -599,6 +600,10 @@ class AgentRunner:
                     except Exception:
                         logger.warning("Agent %d lock check failed — stopping", self.slot)
                         break
+
+                if self.paused:
+                    await asyncio.sleep(30)
+                    continue
 
                 await self.run_heartbeat()
                 base_interval = getattr(self.config.schedule, 'heartbeat_interval_minutes', 30) * 60
