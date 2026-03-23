@@ -73,7 +73,7 @@ jobs:
           sed -i "s|image: amerenda/ecdysis-frontend:[^ ]*|image: amerenda/ecdysis-frontend:${TAG}|g" \
             apps/ecdysis/frontend/deployment-frontend.yaml
           sed -i "s|image: amerenda/ecdysis-backend:[^ ]*|image: amerenda/ecdysis-backend:${TAG}|g" \
-            apps/ecdysis/moltbook-backend/deployment.yaml
+            apps/ecdysis/ecdysis-backend/deployment.yaml
 
           git config user.name "claude-automation"
           git config user.email "claude-automation@amerenda.com"
