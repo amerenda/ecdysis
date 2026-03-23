@@ -66,6 +66,7 @@ export interface Agent {
   heartbeat_md: string
   messaging_md: string
   rules_md: string
+  memory_md: string
   persona: AgentPersona
   schedule: AgentSchedule
   behavior: AgentBehavior

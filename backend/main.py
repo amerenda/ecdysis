@@ -174,6 +174,7 @@ async def get_moltbook_agents():
             "heartbeat_md": row.get("heartbeat_md", ""),
             "messaging_md": row.get("messaging_md", ""),
             "rules_md": row.get("rules_md", ""),
+            "memory_md": row.get("memory_md", ""),
             "persona": {
                 "name": row["name"],
                 "description": row["description"],
@@ -220,6 +221,7 @@ class AgentUpdateRequest(BaseModel):
     heartbeat_md: Optional[str] = None
     messaging_md: Optional[str] = None
     rules_md: Optional[str] = None
+    memory_md: Optional[str] = None
     persona: Optional[dict] = None
     schedule: Optional[dict] = None
     behavior: Optional[dict] = None
@@ -253,6 +255,8 @@ async def update_moltbook_agent(slot: int, req: AgentUpdateRequest):
         updates["messaging_md"] = req.messaging_md
     if req.rules_md is not None:
         updates["rules_md"] = req.rules_md
+    if req.memory_md is not None:
+        updates["memory_md"] = req.memory_md
 
     if req.persona:
         if "name" in req.persona:

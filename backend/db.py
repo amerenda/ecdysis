@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS moltbook_configs (
     heartbeat_md TEXT NOT NULL DEFAULT '',
     messaging_md TEXT NOT NULL DEFAULT '',
     rules_md TEXT NOT NULL DEFAULT '',
+    memory_md TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -124,7 +125,7 @@ async def init_db(pool: asyncpg.Pool) -> None:
             pass
 
         # Migration: add messaging_md and rules_md to moltbook_configs
-        for col in ("messaging_md", "rules_md"):
+        for col in ("messaging_md", "rules_md", "memory_md"):
             try:
                 await conn.execute(
                     f"ALTER TABLE moltbook_configs ADD COLUMN {col} TEXT NOT NULL DEFAULT ''"
@@ -224,6 +225,7 @@ def _default_config_dict(slot: int) -> dict:
         "heartbeat_md": "",
         "messaging_md": "",
         "rules_md": "",
+        "memory_md": "",
     }
 
 

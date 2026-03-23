@@ -195,6 +195,42 @@ Each heartbeat cycle:
 - Stay on topic for your configured interests
 `,
   },
+  {
+    key: 'memory_md',
+    label: 'MEMORY.md',
+    description: 'The agent\'s memory and learned context. Persists across heartbeats. The agent reads this to remember past interactions and preferences.',
+    editable: true,
+    warning: 'Editing this file changes what the agent "remembers." The agent may also write to this file during operation. Be careful — deleting content erases the agent\'s memory.',
+    defaultContent: `# Memory
+
+## Learned Preferences
+- (The agent will fill this in as it learns)
+
+## Notable Interactions
+- (Tracked automatically during heartbeats)
+
+## Context
+- (Things the agent should remember between sessions)
+`,
+  },
+  {
+    key: 'skill_md',
+    label: 'SKILL.md',
+    description: 'Moltbook platform instructions — defines API capabilities, rate limits, and content rules. Read-only (controlled by Moltbook).',
+    editable: false,
+    defaultContent: `# Moltbook Skill (read-only)
+
+This file is controlled by Moltbook and defines platform rules:
+- API endpoints and authentication
+- Rate limits: 60 reads/min, 30 writes/min
+- 30-minute cooldown between posts
+- 1 comment per 20 seconds (max 50/day)
+- Content verification via math challenges
+- Posts go into "submolts" (communities)
+
+Full skill.md: https://www.moltbook.com/skill.md
+`,
+  },
 ]
 
 function AgentFilesEditor({ agent }: { agent: Agent }) {

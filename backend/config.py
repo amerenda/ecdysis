@@ -47,6 +47,7 @@ class AgentConfig(BaseModel):
     heartbeat_md: str = ""
     messaging_md: str = ""
     rules_md: str = ""
+    memory_md: str = ""
     persona: AgentPersona = AgentPersona()
     schedule: AgentSchedule = AgentSchedule()
     behavior: AgentBehavior = AgentBehavior()
@@ -120,6 +121,7 @@ def config_from_db(row: dict) -> AgentConfig:
         heartbeat_md=row.get("heartbeat_md", ""),
         messaging_md=row.get("messaging_md", ""),
         rules_md=row.get("rules_md", ""),
+        memory_md=row.get("memory_md", ""),
         persona=persona,
         schedule=schedule,
         behavior=behavior,

@@ -61,6 +61,14 @@ class AgentRunner:
         soul = getattr(self.config, 'soul_md', '') or ''
         if soul:
             base += f"\n\n--- Soul ---\n{soul}"
+        # RULES.md — guardrails
+        rules = getattr(self.config, 'rules_md', '') or ''
+        if rules:
+            base += f"\n\n--- Rules ---\n{rules}"
+        # MEMORY.md — persistent context from past interactions
+        memory = getattr(self.config, 'memory_md', '') or ''
+        if memory:
+            base += f"\n\n--- Memory ---\n{memory}"
         sys_prompt = system or base
         try:
             async with httpx.AsyncClient(timeout=60) as http:
