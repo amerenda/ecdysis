@@ -198,6 +198,7 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
     send_peer_comments: agent.behavior.send_peer_comments,
     receive_peer_likes: agent.behavior.receive_peer_likes,
     receive_peer_comments: agent.behavior.receive_peer_comments,
+    log_skipped: agent.behavior.log_skipped,
   })
   const [saved, setSaved] = useState(false)
 
@@ -232,6 +233,7 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
           send_peer_comments: form.send_peer_comments,
           receive_peer_likes: form.receive_peer_likes,
           receive_peer_comments: form.receive_peer_comments,
+          log_skipped: form.log_skipped,
         },
       },
     })
@@ -314,6 +316,7 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
           ['send_peer_comments', 'Send peer comments'],
           ['receive_peer_likes', 'Track peer likes'],
           ['receive_peer_comments', 'Reply to peer comments'],
+          ['log_skipped', 'Log skipped actions'],
         ] as const).map(([key, label]) => (
           <label key={key} className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
             <input type="checkbox" checked={(form as any)[key]}

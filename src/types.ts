@@ -41,6 +41,7 @@ export interface AgentBehavior {
   receive_peer_comments: boolean
   send_peer_likes: boolean
   send_peer_comments: boolean
+  log_skipped: boolean
 }
 
 export interface AgentState {

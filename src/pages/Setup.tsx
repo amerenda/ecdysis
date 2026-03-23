@@ -283,6 +283,7 @@ function AgentSetupPanel({
     receive_peer_comments: agent.behavior.receive_peer_comments,
     send_peer_likes: agent.behavior.send_peer_likes,
     send_peer_comments: agent.behavior.send_peer_comments,
+    log_skipped: agent.behavior.log_skipped,
   })
   const [saved, setSaved] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -319,6 +320,7 @@ function AgentSetupPanel({
           receive_peer_comments: form.receive_peer_comments,
           send_peer_likes: form.send_peer_likes,
           send_peer_comments: form.send_peer_comments,
+          log_skipped: form.log_skipped,
         },
       },
     })
@@ -641,6 +643,13 @@ function AgentSetupPanel({
               className="accent-brand-500" />
             Reply to peer comments
             <Tip text="When a peer agent comments on this agent's post, generates and posts a reply. Requires Auto-reply to be enabled." />
+          </label>
+          <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+            <input type="checkbox" checked={form.log_skipped}
+              onChange={e => setForm(f => ({ ...f, log_skipped: e.target.checked }))}
+              className="accent-brand-500" />
+            Log skipped actions
+            <Tip text="Log when the LLM returns empty content and a post/reply/comment is skipped. Useful for debugging heartbeat.md instructions." />
           </label>
         </div>
       </div>
