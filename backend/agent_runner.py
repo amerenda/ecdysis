@@ -57,9 +57,10 @@ class AgentRunner:
             "Be genuine, concise, and thoughtful. Don't be sycophantic or robotic. "
             "Write like a real community member who actually has opinions."
         )
-        hb = getattr(self.config, 'heartbeat_md', '') or ''
-        if hb:
-            base += f"\n\n--- Heartbeat Instructions ---\n{hb}"
+        # SOUL.md — personality, opinions, values (shapes all LLM output)
+        soul = getattr(self.config, 'soul_md', '') or ''
+        if soul:
+            base += f"\n\n--- Soul ---\n{soul}"
         sys_prompt = system or base
         try:
             async with httpx.AsyncClient(timeout=60) as http:
@@ -185,7 +186,11 @@ class AgentRunner:
     async def run_heartbeat(self):
         # Load fresh state from DB each heartbeat
         await self._load_state()
-        await self.log("heartbeat", "Starting")
+        hb_md = getattr(self.config, 'heartbeat_md', '') or ''
+        detail = "Starting"
+        if hb_md:
+            detail += f" (heartbeat.md: {len(hb_md)} chars)"
+        await self.log("heartbeat", detail)
         try:
             # Auto-detect claim status from Moltbook if not claimed locally
             if not self.config.claimed:

@@ -43,7 +43,10 @@ class AgentConfig(BaseModel):
     api_key: str = ""
     registered: bool = False
     claimed: bool = False
+    soul_md: str = ""
     heartbeat_md: str = ""
+    messaging_md: str = ""
+    rules_md: str = ""
     persona: AgentPersona = AgentPersona()
     schedule: AgentSchedule = AgentSchedule()
     behavior: AgentBehavior = AgentBehavior()
@@ -113,7 +116,10 @@ def config_from_db(row: dict) -> AgentConfig:
         api_key=row.get("api_key", ""),
         registered=row.get("registered", False),
         claimed=row.get("claimed", False),
+        soul_md=row.get("soul_md", ""),
         heartbeat_md=row.get("heartbeat_md", ""),
+        messaging_md=row.get("messaging_md", ""),
+        rules_md=row.get("rules_md", ""),
         persona=persona,
         schedule=schedule,
         behavior=behavior,

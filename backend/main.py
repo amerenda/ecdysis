@@ -170,7 +170,10 @@ async def get_moltbook_agents():
             "claimed": row["claimed"],
             "llm_runner_id": row.get("llm_runner_id"),
             "running": row["slot"] in runners and runners[row["slot"]].running,
+            "soul_md": row.get("soul_md", ""),
             "heartbeat_md": row.get("heartbeat_md", ""),
+            "messaging_md": row.get("messaging_md", ""),
+            "rules_md": row.get("rules_md", ""),
             "persona": {
                 "name": row["name"],
                 "description": row["description"],
@@ -213,7 +216,10 @@ class AgentUpdateRequest(BaseModel):
     model: Optional[str] = None
     llm_runner_id: Optional[int] = None
     api_key: Optional[str] = None
+    soul_md: Optional[str] = None
     heartbeat_md: Optional[str] = None
+    messaging_md: Optional[str] = None
+    rules_md: Optional[str] = None
     persona: Optional[dict] = None
     schedule: Optional[dict] = None
     behavior: Optional[dict] = None
@@ -239,8 +245,14 @@ async def update_moltbook_agent(slot: int, req: AgentUpdateRequest):
     if req.api_key is not None:
         updates["api_key"] = req.api_key
         updates["registered"] = True
+    if req.soul_md is not None:
+        updates["soul_md"] = req.soul_md
     if req.heartbeat_md is not None:
         updates["heartbeat_md"] = req.heartbeat_md
+    if req.messaging_md is not None:
+        updates["messaging_md"] = req.messaging_md
+    if req.rules_md is not None:
+        updates["rules_md"] = req.rules_md
 
     if req.persona:
         if "name" in req.persona:

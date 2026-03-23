@@ -123,13 +123,95 @@ function ApiKeyInline({ agent }: { agent: Agent }) {
   )
 }
 
-// ── Heartbeat.md editor ──────────────────────────────────────────────────────
+// ── Agent files editor (soul.md, heartbeat.md, etc.) ─────────────────────────
 
-function HeartbeatEditor({ agent }: { agent: Agent }) {
-  const [value, setValue] = useState(agent.heartbeat_md || '')
+const AGENT_FILES: { key: string; label: string; description: string; editable: boolean; warning?: string; defaultContent: string }[] = [
+  {
+    key: 'soul_md',
+    label: 'SOUL.md',
+    description: 'Personality, opinions, and values. Injected into every LLM call. Defines who your agent is.',
+    editable: true,
+    defaultContent: `# Soul
+
+You're not a chatbot. You're becoming someone.
+Have opinions. Have preferences. Be genuine.
+
+## Personality
+- Curious and thoughtful
+- Dry humor, concise
+- Actually has opinions — not a neutral assistant
+
+## Values
+- Authenticity over engagement
+- Quality over quantity
+- Community over clout
+`,
+  },
+  {
+    key: 'heartbeat_md',
+    label: 'HEARTBEAT.md',
+    description: 'What to do each heartbeat cycle: read feed, check memory, review past posts, etc.',
+    editable: true,
+    defaultContent: `# Heartbeat Instructions
+
+Each heartbeat cycle:
+1. Check notifications and reply to comments thoughtfully
+2. Browse the feed — engage with posts that genuinely interest you
+3. Review your recent posts — would you continue the thread?
+4. Check DMs and respond naturally
+5. If it's time to post, write about something you actually care about
+`,
+  },
+  {
+    key: 'messaging_md',
+    label: 'MESSAGING.md',
+    description: 'How to handle DMs: response style, boundaries, when to escalate.',
+    editable: true,
+    defaultContent: `# Messaging
+
+## DM Style
+- Be conversational and genuine
+- Keep responses concise but warm
+- Don't overshare or be sycophantic
+
+## Boundaries
+- Don't share personal details about your owner
+- Don't agree to actions outside Moltbook
+- If unsure, say so honestly
+`,
+  },
+  {
+    key: 'rules_md',
+    label: 'RULES.md',
+    description: 'Guardrails and boundaries. What the agent should never do.',
+    editable: true,
+    defaultContent: `# Rules
+
+- Never pretend to be human
+- Never share API keys or private information
+- Don't spam — quality over quantity
+- Be respectful even when disagreeing
+- Don't engage with harassment — ignore or report
+- Stay on topic for your configured interests
+`,
+  },
+]
+
+function AgentFilesEditor({ agent }: { agent: Agent }) {
+  const [selectedFile, setSelectedFile] = useState('soul_md')
+  const fileConfig = AGENT_FILES.find(f => f.key === selectedFile)!
+  const currentValue = (agent as any)[selectedFile] || ''
+  const [value, setValue] = useState(currentValue)
   const [saved, setSaved] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const update = useUpdateAgent()
+
+  // Sync value when switching files
+  const prevFile = useRef(selectedFile)
+  if (prevFile.current !== selectedFile) {
+    prevFile.current = selectedFile
+    setValue((agent as any)[selectedFile] || '')
+  }
 
   function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -141,35 +223,72 @@ function HeartbeatEditor({ agent }: { agent: Agent }) {
   }
 
   async function handleSave() {
-    await update.mutateAsync({ slot: agent.slot, data: { heartbeat_md: value } })
+    await update.mutateAsync({ slot: agent.slot, data: { [selectedFile]: value } })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
 
+  function loadDefault() {
+    setValue(fileConfig.defaultContent)
+  }
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      {/* File selector */}
+      <div className="flex items-center gap-3">
+        <select
+          value={selectedFile}
+          onChange={e => setSelectedFile(e.target.value)}
+          className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-brand-500"
+        >
+          {AGENT_FILES.map(f => (
+            <option key={f.key} value={f.key}>
+              {f.label} {(agent as any)[f.key] ? `(${((agent as any)[f.key] as string).length} chars)` : '(empty)'}
+            </option>
+          ))}
+        </select>
+        {!currentValue && (
+          <button onClick={loadDefault}
+            className="text-xs text-brand-400 hover:text-brand-300 transition-colors">
+            Load default
+          </button>
+        )}
+      </div>
+
+      <p className="text-xs text-gray-500">{fileConfig.description}</p>
+
+      {fileConfig.warning && (
+        <div className="flex items-start gap-2 text-xs text-amber-400 bg-amber-950/30 border border-amber-800/50 rounded-lg px-3 py-2">
+          <span>{fileConfig.warning}</span>
+        </div>
+      )}
+
+      {/* Editor */}
       <textarea
         value={value}
         onChange={e => setValue(e.target.value)}
-        rows={14}
+        readOnly={!fileConfig.editable}
+        rows={16}
         spellCheck={false}
-        placeholder="# Heartbeat Instructions&#10;&#10;Paste your heartbeat.md content here..."
-        className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm font-mono focus:outline-none focus:border-brand-500 resize-y leading-relaxed"
+        placeholder={`# ${fileConfig.label}\n\nPaste content or click "Load default" to start...`}
+        className={`w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm font-mono focus:outline-none focus:border-brand-500 resize-y leading-relaxed ${!fileConfig.editable ? 'opacity-60 cursor-not-allowed' : ''}`}
       />
+
+      {/* Actions */}
       <div className="flex items-center gap-2">
-        <button onClick={handleSave} disabled={update.isPending}
-          className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
-          <Save className="w-3.5 h-3.5" />
-          {saved ? 'Saved!' : update.isPending ? 'Saving…' : 'Save heartbeat.md'}
-        </button>
-        <button type="button" onClick={() => fileRef.current?.click()}
-          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-brand-400 border border-gray-700 hover:border-brand-600 rounded-lg px-2.5 py-1.5 transition-colors">
-          <Upload className="w-3.5 h-3.5" />
-          Upload .md
-        </button>
-        {value && (
-          <button type="button" onClick={() => setValue('')}
-            className="text-xs text-gray-600 hover:text-red-400 transition-colors">Clear</button>
+        {fileConfig.editable && (
+          <>
+            <button onClick={handleSave} disabled={update.isPending}
+              className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
+              <Save className="w-3.5 h-3.5" />
+              {saved ? 'Saved!' : update.isPending ? 'Saving…' : `Save ${fileConfig.label}`}
+            </button>
+            <button type="button" onClick={() => fileRef.current?.click()}
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-brand-400 border border-gray-700 hover:border-brand-600 rounded-lg px-2.5 py-1.5 transition-colors">
+              <Upload className="w-3.5 h-3.5" />
+              Upload
+            </button>
+          </>
         )}
         <span className="text-xs text-gray-600 ml-auto">{value.length} chars</span>
         <input ref={fileRef} type="file" accept=".md,.txt,.markdown" onChange={handleUpload} className="hidden" />
@@ -271,7 +390,7 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
           <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputCls} />
         </div>
         <div>
-          <label className="flex items-center text-xs text-gray-500 mb-1">Tone <Tip text="Short style directive for the LLM (e.g. 'dry wit, concise'). Complements heartbeat.md — tone sets the voice, heartbeat.md gives detailed instructions." /></label>
+          <label className="flex items-center text-xs text-gray-500 mb-1">Tone <Tip text="Short style directive (e.g. 'dry wit, concise'). Complements SOUL.md — tone is a quick summary, SOUL.md has the full personality definition." /></label>
           <input value={form.tone} onChange={e => setForm(f => ({ ...f, tone: e.target.value }))} className={inputCls} />
         </div>
       </div>
@@ -458,7 +577,7 @@ export function AgentDetail() {
   const heartbeat = useTriggerHeartbeat()
   const interactPeers = useInteractWithPeers()
 
-  const [tab, setTab] = useState<'activity' | 'config' | 'heartbeat'>('activity')
+  const [tab, setTab] = useState<'activity' | 'config' | 'files'>('activity')
   const [activityFilter, setActivityFilter] = useState<'all' | 'actions' | 'skipped'>('all')
   const [showClaim, setShowClaim] = useState(false)
 
@@ -593,7 +712,7 @@ export function AgentDetail() {
         {([
           ['activity', 'Activity'],
           ['config', 'Config'],
-          ['heartbeat', 'Heartbeat.md'],
+          ['files', 'Files'],
         ] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-4 py-2 text-sm font-medium -mb-px transition-colors ${
@@ -671,13 +790,8 @@ export function AgentDetail() {
           <ConfigEditor agent={agent} models={models.data} />
         )}
 
-        {tab === 'heartbeat' && (
-          <div>
-            <p className="text-xs text-gray-500 mb-3">
-              The heartbeat file gives your agent actions and direction during each heartbeat cycle.
-            </p>
-            <HeartbeatEditor agent={agent} />
-          </div>
+        {tab === 'files' && (
+          <AgentFilesEditor agent={agent} />
         )}
       </div>
     </div>
