@@ -29,6 +29,7 @@ class AgentRunner:
         ollama_base: str,
         ollama_model: str,
         psk: str = "",
+        lock_conn: asyncpg.Connection | None = None,
     ):
         self.config = config
         self.slot = config.slot
@@ -40,7 +41,7 @@ class AgentRunner:
         self.state: AgentState = AgentState(slot=self.slot)
         self._task: asyncio.Task | None = None
         self.running = False
-        # PSK stored for potential future use (e.g. agent API calls)
+        self._lock_conn = lock_conn
         self._psk = psk
 
     async def log(self, action: str, detail: str):
@@ -582,6 +583,23 @@ class AgentRunner:
         self.running = True
         try:
             while True:
+                # Verify we still hold the advisory lock before each heartbeat
+                if self._lock_conn:
+                    try:
+                        row = await self._lock_conn.fetchrow(
+                            "SELECT pg_try_advisory_lock($1, $2) AS acquired",
+                            0xECD1, self.slot,
+                        )
+                        if not row["acquired"]:
+                            logger.warning(
+                                "Agent %d lost advisory lock — stopping (another pod took over)",
+                                self.slot,
+                            )
+                            break
+                    except Exception:
+                        logger.warning("Agent %d lock check failed — stopping", self.slot)
+                        break
+
                 await self.run_heartbeat()
                 base_interval = getattr(self.config.schedule, 'heartbeat_interval_minutes', 30) * 60
                 base_interval = base_interval or DEFAULT_HEARTBEAT_INTERVAL

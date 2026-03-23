@@ -98,6 +98,7 @@ def _make_runner(config: AgentConfig, pool: asyncpg.Pool, ollama_base: str) -> A
         ollama_base=ollama_base,
         ollama_model=config.model,
         psk=AGENT_PSK,
+        lock_conn=_lock_conn,
     )
 
 
