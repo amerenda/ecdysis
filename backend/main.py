@@ -389,8 +389,8 @@ async def trigger_moltbook_heartbeat(slot: int):
 async def compact_memory(slot: int):
     if slot not in runners:
         raise HTTPException(status_code=400, detail="Agent not running")
-    result = await runners[slot].compact_memory()
-    return {"ok": True, "memory_md": result, "chars": len(result)}
+    asyncio.create_task(runners[slot].compact_memory())
+    return {"ok": True, "message": "Memory compaction started in background"}
 
 
 @app.post("/api/agents/{slot}/interact-with-peers")
