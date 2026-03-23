@@ -22,6 +22,7 @@ export interface AgentPersona {
 
 export interface AgentSchedule {
   post_interval_minutes: number
+  heartbeat_interval_minutes: number
   active_hours_start: number
   active_hours_end: number
 }

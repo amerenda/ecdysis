@@ -18,7 +18,7 @@ from moltbook_client import MoltbookClient
 
 logger = logging.getLogger(__name__)
 
-HEARTBEAT_INTERVAL = 30 * 60  # 30 min
+DEFAULT_HEARTBEAT_INTERVAL = 30 * 60  # 30 min fallback
 
 
 class AgentRunner:
@@ -491,7 +491,8 @@ class AgentRunner:
         try:
             while True:
                 await self.run_heartbeat()
-                await asyncio.sleep(HEARTBEAT_INTERVAL)
+                interval = getattr(self.config.schedule, 'heartbeat_interval_minutes', 30) * 60
+                await asyncio.sleep(interval or DEFAULT_HEARTBEAT_INTERVAL)
         except asyncio.CancelledError:
             pass
         finally:

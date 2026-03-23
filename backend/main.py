@@ -179,6 +179,7 @@ async def get_moltbook_agents():
             },
             "schedule": {
                 "post_interval_minutes": row["post_interval_minutes"],
+                "heartbeat_interval_minutes": row.get("heartbeat_interval_minutes", 30),
                 "active_hours_start": row["active_hours_start"],
                 "active_hours_end": row["active_hours_end"],
             },
@@ -252,7 +253,7 @@ async def update_moltbook_agent(slot: int, req: AgentUpdateRequest):
             updates["topics"] = req.persona["topics"]
 
     if req.schedule:
-        for field in ("post_interval_minutes", "active_hours_start", "active_hours_end"):
+        for field in ("post_interval_minutes", "heartbeat_interval_minutes", "active_hours_start", "active_hours_end"):
             if field in req.schedule:
                 updates[field] = req.schedule[field]
 

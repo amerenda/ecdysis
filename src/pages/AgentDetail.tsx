@@ -189,6 +189,7 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
     tone: agent.persona.tone,
     topics: agent.persona.topics.join(', '),
     post_interval_minutes: agent.schedule.post_interval_minutes,
+    heartbeat_interval_minutes: agent.schedule.heartbeat_interval_minutes,
     active_hours_start: agent.schedule.active_hours_start,
     active_hours_end: agent.schedule.active_hours_end,
     max_post_length: agent.behavior.max_post_length,
@@ -222,6 +223,7 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
         },
         schedule: {
           post_interval_minutes: form.post_interval_minutes,
+          heartbeat_interval_minutes: form.heartbeat_interval_minutes,
           active_hours_start: form.active_hours_start,
           active_hours_end: form.active_hours_end,
         },
@@ -269,7 +271,7 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
           <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputCls} />
         </div>
         <div>
-          <label className="flex items-center text-xs text-gray-500 mb-1">Tone <Tip text="Style instruction for the LLM system prompt." /></label>
+          <label className="flex items-center text-xs text-gray-500 mb-1">Tone <Tip text="Short style directive for the LLM (e.g. 'dry wit, concise'). Complements heartbeat.md — tone sets the voice, heartbeat.md gives detailed instructions." /></label>
           <input value={form.tone} onChange={e => setForm(f => ({ ...f, tone: e.target.value }))} className={inputCls} />
         </div>
       </div>
@@ -283,10 +285,14 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
       </div>
 
       {/* Schedule */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div>
-          <label className="flex items-center text-xs text-gray-500 mb-1">Post every (min) <Tip text="Minimum time between posts." /></label>
+          <label className="flex items-center text-xs text-gray-500 mb-1">Post every (min) <Tip text="Minimum time between new posts. The agent may still reply, like, and comment between posts." /></label>
           <input type="number" min={30} value={form.post_interval_minutes} onChange={e => setForm(f => ({ ...f, post_interval_minutes: +e.target.value }))} className={inputCls} />
+        </div>
+        <div>
+          <label className="flex items-center text-xs text-gray-500 mb-1">Heartbeat (min) <Tip text="How often the agent wakes up to read feed, reply to comments, like posts, handle DMs, and interact with peers. Does not create new posts — that's controlled by 'Post every'." /></label>
+          <input type="number" min={5} max={120} value={form.heartbeat_interval_minutes} onChange={e => setForm(f => ({ ...f, heartbeat_interval_minutes: +e.target.value }))} className={inputCls} />
         </div>
         <div>
           <label className="text-xs text-gray-500 mb-1 block">Active from (h)</label>

@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS moltbook_configs (
     claimed BOOLEAN NOT NULL DEFAULT FALSE,
     llm_runner_id INT,
     post_interval_minutes INT NOT NULL DEFAULT 120,
+    heartbeat_interval_minutes INT NOT NULL DEFAULT 30,
     active_hours_start INT NOT NULL DEFAULT 8,
     active_hours_end INT NOT NULL DEFAULT 22,
     max_post_length INT NOT NULL DEFAULT 280,
@@ -110,6 +111,15 @@ async def init_db(pool: asyncpg.Pool) -> None:
         except asyncpg.DuplicateColumnError:
             pass
 
+        # Migration: add heartbeat_interval_minutes to moltbook_configs
+        try:
+            await conn.execute(
+                "ALTER TABLE moltbook_configs ADD COLUMN heartbeat_interval_minutes INT NOT NULL DEFAULT 30"
+            )
+            logger.info("Added column moltbook_configs.heartbeat_interval_minutes")
+        except asyncpg.DuplicateColumnError:
+            pass
+
 
 # ── Read-only access to llm_runners ──────────────────────────────────────────
 
@@ -170,6 +180,7 @@ def _default_config_dict(slot: int) -> dict:
         "claimed": False,
         "llm_runner_id": None,
         "post_interval_minutes": 120,
+        "heartbeat_interval_minutes": 30,
         "active_hours_start": 8,
         "active_hours_end": 22,
         "max_post_length": 280,
