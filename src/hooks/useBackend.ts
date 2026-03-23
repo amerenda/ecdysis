@@ -172,3 +172,11 @@ export function useInteractWithPeers() {
     mutationFn: (slot: number) => post(`/api/agents/${slot}/interact-with-peers`),
   })
 }
+
+export function useCompactMemory() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (slot: number) => post(`/api/agents/${slot}/compact-memory`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['agents'] }),
+  })
+}

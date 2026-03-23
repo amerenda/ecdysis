@@ -7,7 +7,7 @@ import {
 import {
   useAgents, useAgentActivity, useModels,
   useStartAgent, useStopAgent, useTriggerHeartbeat, useInteractWithPeers,
-  useUpdateAgent, useClaimStatus,
+  useUpdateAgent, useClaimStatus, useCompactMemory,
 } from '../hooks/useBackend'
 import type { Agent, ActivityEntry } from '../types'
 
@@ -241,6 +241,7 @@ function AgentFilesEditor({ agent }: { agent: Agent }) {
   const [saved, setSaved] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const update = useUpdateAgent()
+  const compactMemory = useCompactMemory()
 
   // Sync value when switching files
   const prevFile = useRef(selectedFile)
@@ -324,6 +325,13 @@ function AgentFilesEditor({ agent }: { agent: Agent }) {
               <Upload className="w-3.5 h-3.5" />
               Upload
             </button>
+            {selectedFile === 'memory_md' && value.length > 100 && (
+              <button onClick={() => compactMemory.mutate(agent.slot)} disabled={compactMemory.isPending}
+                className="flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 border border-amber-800 hover:border-amber-600 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-50">
+                {compactMemory.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Compact memory
+              </button>
+            )}
           </>
         )}
         <span className="text-xs text-gray-600 ml-auto">{value.length} chars</span>

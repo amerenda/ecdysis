@@ -348,6 +348,14 @@ async def trigger_moltbook_heartbeat(slot: int):
     return {"ok": True}
 
 
+@app.post("/api/agents/{slot}/compact-memory")
+async def compact_memory(slot: int):
+    if slot not in runners:
+        raise HTTPException(status_code=400, detail="Agent not running")
+    result = await runners[slot].compact_memory()
+    return {"ok": True, "memory_md": result, "chars": len(result)}
+
+
 @app.post("/api/agents/{slot}/interact-with-peers")
 async def interact_with_peers(slot: int):
     if slot not in runners:

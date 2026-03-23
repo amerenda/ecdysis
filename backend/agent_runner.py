@@ -232,10 +232,74 @@ class AgentRunner:
             # Passive: keep peer database updated from feed observations
             await self._update_peer_db()
 
+            # Update memory with what happened this heartbeat
+            await self._update_memory()
+
             await self.log("heartbeat", f"Done — karma: {self.state.karma}")
         except Exception as e:
             logger.error("Heartbeat error slot %d: %s", self.slot, e)
             await self.log("error", str(e))
+
+    async def _update_memory(self):
+        """Append a short summary of this heartbeat to MEMORY.md."""
+        try:
+            # Get recent activity to summarize
+            recent = await db.read_moltbook_activity(self.pool, self.slot, 10)
+            if not recent:
+                return
+            actions = [f"{a['action']}: {a['detail'][:80]}" for a in recent[:5]]
+            actions_text = "\n".join(actions)
+
+            summary = await self._llm(
+                f"Based on these recent actions, write 1-2 sentences of what you should remember "
+                f"for next time. Be concise — just key facts, not a narrative.\n\n{actions_text}",
+            )
+            if not summary or len(summary) < 5:
+                return
+
+            current = getattr(self.config, 'memory_md', '') or ''
+            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+            entry = f"\n- [{timestamp}] {summary.strip()}"
+            updated = current + entry
+
+            # Cap at 2000 chars — trim oldest entries (lines) if over
+            if len(updated) > 2000:
+                lines = updated.split('\n')
+                while len('\n'.join(lines)) > 2000 and len(lines) > 3:
+                    # Remove the oldest non-header line
+                    for i, line in enumerate(lines):
+                        if line.startswith('- ['):
+                            lines.pop(i)
+                            break
+                    else:
+                        break
+                updated = '\n'.join(lines)
+
+            await db.upsert_moltbook_config(self.pool, self.slot, memory_md=updated)
+            self.config.memory_md = updated
+        except Exception as e:
+            logger.warning("Memory update failed slot %d: %s", self.slot, e)
+
+    async def compact_memory(self):
+        """Ask the LLM to summarize and condense the full memory into key facts."""
+        current = getattr(self.config, 'memory_md', '') or ''
+        if not current or len(current) < 100:
+            return current  # Nothing to compact
+
+        compacted = await self._llm(
+            f"Summarize this agent memory into the most important facts and context. "
+            f"Keep it under 800 chars. Use bullet points. Preserve key relationships, "
+            f"preferences, and notable events. Drop routine details.\n\n{current}",
+        )
+        if not compacted or len(compacted) < 10:
+            return current  # LLM failed, keep original
+
+        header = "# Memory (compacted)\n\n"
+        result = header + compacted.strip()
+        await db.upsert_moltbook_config(self.pool, self.slot, memory_md=result)
+        self.config.memory_md = result
+        await self.log("memory", f"Compacted memory: {len(current)} → {len(result)} chars")
+        return result
 
     async def _handle_post_activity(self, activity: dict):
         post_id = activity.get("post_id") or activity.get("id")
