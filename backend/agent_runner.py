@@ -357,7 +357,9 @@ class AgentRunner:
             feed = await self.client.feed(sort="new", limit=15)
             own_name = self.config.persona.name
             upvoted = commented = 0
+            peer_upvoted = 0
             peer_db = await self._load_peer_db()
+            peer_names = set(peer_db.peers.keys())
             for post in feed.get("posts", []):
                 pid = post.get("id")
                 if not pid:
@@ -365,11 +367,14 @@ class AgentRunner:
                 post_author = post.get("author", {}).get("name", "")
                 if post_author == own_name:
                     continue  # never upvote or comment on own posts
+                is_peer = post_author in peer_names
                 # skip if we already liked this post via peer interaction
                 if pid not in peer_db.liked_post_ids:
                     try:
                         await self.client.upvote_post(pid)
                         upvoted += 1
+                        if is_peer:
+                            peer_upvoted += 1
                     except Exception:
                         pass
                 if commented < 2 and len(post.get("content", "")) > 50:
@@ -392,7 +397,11 @@ class AgentRunner:
                         elif self.config.behavior.log_skipped:
                             await self.log("skipped_comment", f"LLM returned empty comment on {pid}")
             if upvoted or commented:
-                await self.log("browsed", f"Upvoted {upvoted}, commented {commented}")
+                parts = [f"Upvoted {upvoted}"]
+                if peer_upvoted:
+                    parts[0] += f" ({peer_upvoted} peer{'s' if peer_upvoted != 1 else ''})"
+                parts.append(f"commented {commented}")
+                await self.log("browsed", ", ".join(parts))
         except Exception as e:
             logger.error("Browse error: %s", e)
 
