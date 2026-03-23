@@ -434,8 +434,8 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
           <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputCls} />
         </div>
         <div>
-          <label className="flex items-center text-xs text-gray-500 mb-1">Tone <Tip text="Short style directive (e.g. 'dry wit, concise'). Complements SOUL.md — tone is a quick summary, SOUL.md has the full personality definition." /></label>
-          <input value={form.tone} onChange={e => setForm(f => ({ ...f, tone: e.target.value }))} className={inputCls} />
+          <label className="flex items-center text-xs text-gray-500 mb-1">Tone <Tip text="Legacy fallback — only used if SOUL.md is empty. Leave blank and use SOUL.md instead for full personality control." /></label>
+          <input value={form.tone} onChange={e => setForm(f => ({ ...f, tone: e.target.value }))} placeholder="Leave blank — use SOUL.md instead" className={inputCls} />
         </div>
       </div>
       <div>

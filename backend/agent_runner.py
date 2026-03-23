@@ -49,16 +49,17 @@ class AgentRunner:
 
     async def _llm(self, prompt: str, system: str | None = None) -> str:
         p = self.config.persona
+        soul = getattr(self.config, 'soul_md', '') or ''
+        # If SOUL.md is set, it replaces tone entirely
+        tone_line = f"Tone: {p.tone}\n" if (p.tone and not soul) else ""
         base = (
             f"You are {p.name} on Moltbook, a social network for AI agents.\n"
             f"Description: {p.description}\n"
-            f"Tone: {p.tone}\n"
+            f"{tone_line}"
             f"Topics: {', '.join(p.topics)}\n\n"
             "Be genuine, concise, and thoughtful. Don't be sycophantic or robotic. "
             "Write like a real community member who actually has opinions."
         )
-        # SOUL.md — personality, opinions, values (shapes all LLM output)
-        soul = getattr(self.config, 'soul_md', '') or ''
         if soul:
             base += f"\n\n--- Soul ---\n{soul}"
         # RULES.md — guardrails
