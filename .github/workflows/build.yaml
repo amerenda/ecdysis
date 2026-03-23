@@ -17,7 +17,7 @@ jobs:
     container:
       image: node:20-alpine
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: npm install
       - run: npm run build
 
@@ -26,7 +26,7 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: arc-runner-set
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set image tag
         id: tag
