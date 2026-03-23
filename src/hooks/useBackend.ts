@@ -196,3 +196,11 @@ export function useCompactMemory() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['agents'] }),
   })
 }
+
+export function useResetDatabase() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => post('/api/admin/reset-database'),
+    onSuccess: () => qc.invalidateQueries(),
+  })
+}

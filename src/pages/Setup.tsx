@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { Save, Plus, Trash2, Power, Info, AlertTriangle, HelpCircle, FileText, Upload, Key, Eye, EyeOff } from 'lucide-react'
-import { useAgents, useModels, useUpdateAgent, useDeleteAgent, useGpu, useRegisterAgent, useSetupOwnerEmail } from '../hooks/useBackend'
+import { useAgents, useModels, useUpdateAgent, useDeleteAgent, useGpu, useRegisterAgent, useSetupOwnerEmail, useHealth, useResetDatabase } from '../hooks/useBackend'
 import type { Agent } from '../types'
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
@@ -896,9 +896,13 @@ export function Setup() {
   const models = useModels()
   const update = useUpdateAgent()
   const deleteAgent = useDeleteAgent()
+  const health = useHealth()
+  const resetDb = useResetDatabase()
 
+  const isUat = health.data?.is_uat === true
   const [activeTab, setActiveTab] = useState<number | null>(null)
   const [registerAllOpen, setRegisterAllOpen] = useState(false)
+  const [confirmReset, setConfirmReset] = useState(false)
 
   const allAgents = agents.data ?? []
   const created = allAgents.filter(isCreated)
@@ -1004,6 +1008,51 @@ export function Setup() {
             <Plus className="w-4 h-4" />
             Create Agent
           </button>
+        </div>
+      )}
+
+      {/* UAT database reset — only visible on UAT environments */}
+      {isUat && (
+        <div className="mt-8 border border-red-900/50 rounded-xl p-4 bg-red-950/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-red-300">Reset UAT Database</p>
+              <p className="text-xs text-gray-500 mt-1">Drops all agent data and recreates empty tables. This cannot be undone.</p>
+            </div>
+            {!confirmReset ? (
+              <button
+                onClick={() => setConfirmReset(true)}
+                className="bg-red-900/50 hover:bg-red-800/50 text-red-300 text-sm font-medium px-4 py-2 rounded-lg transition-colors border border-red-800/50"
+              >
+                Reset Database
+              </button>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    await resetDb.mutateAsync()
+                    setConfirmReset(false)
+                  }}
+                  disabled={resetDb.isPending}
+                  className="bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                >
+                  {resetDb.isPending ? 'Resetting...' : 'Confirm Reset'}
+                </button>
+                <button
+                  onClick={() => setConfirmReset(false)}
+                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm px-3 py-2 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+          {resetDb.isError && (
+            <p className="text-xs text-red-400 mt-2">Error: {(resetDb.error as Error).message}</p>
+          )}
+          {resetDb.isSuccess && (
+            <p className="text-xs text-green-400 mt-2">Database reset successfully.</p>
+          )}
         </div>
       )}
     </div>

@@ -193,7 +193,20 @@ app.add_middleware(
 @app.get("/health")
 async def health():
     db_ok = app.state.db is not None
-    return {"ok": True, "service": "moltbook-backend", "node": NODE, "db": db_ok}
+    db_name = None
+    if db_ok:
+        try:
+            async with app.state.db.acquire() as conn:
+                db_name = await conn.fetchval("SELECT current_database()")
+        except Exception:
+            pass
+    return {
+        "ok": True,
+        "service": "moltbook-backend",
+        "node": NODE,
+        "db": db_ok,
+        "is_uat": db_name is not None and "uat" in db_name.lower(),
+    }
 
 
 # ── Moltbook agent config ────────────────────────────────────────────────────
@@ -602,6 +615,46 @@ async def delete_moltbook_agent(slot: int):
         del runners[slot]
     await db.delete_moltbook_config(app.state.db, slot)
     return {"ok": True}
+
+
+# ── UAT database reset ────────────────────────────────────────────────────────
+
+
+@app.post("/api/admin/reset-database")
+async def reset_database():
+    """Reset the database by dropping and recreating all moltbook tables.
+    ONLY works if the database name contains 'uat' — hardcoded safety check."""
+    pool = app.state.db
+
+    # Safety: verify the database name contains 'uat'
+    async with pool.acquire() as conn:
+        db_name = await conn.fetchval("SELECT current_database()")
+    if "uat" not in db_name.lower():
+        raise HTTPException(
+            status_code=403,
+            detail=f"Reset refused: database '{db_name}' is not a UAT database",
+        )
+
+    # Stop all running agents
+    for slot, runner in list(runners.items()):
+        runner.stop()
+    runners.clear()
+
+    # Drop and recreate tables
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            DROP TABLE IF EXISTS moltbook_peer_interactions CASCADE;
+            DROP TABLE IF EXISTS moltbook_peer_posts CASCADE;
+            DROP TABLE IF EXISTS moltbook_activity CASCADE;
+            DROP TABLE IF EXISTS moltbook_state CASCADE;
+            DROP TABLE IF EXISTS moltbook_configs CASCADE;
+        """)
+
+    # Recreate tables
+    await db.init_db(pool)
+
+    logger.info("UAT database '%s' reset successfully", db_name)
+    return {"ok": True, "database": db_name}
 
 
 # ── Prometheus metrics ────────────────────────────────────────────────────────
