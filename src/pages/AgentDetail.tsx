@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   ArrowLeft, Play, Square, Zap, Users, Loader2, Settings, RefreshCw,
-  FileText, Upload, Key, Eye, EyeOff, Save, HelpCircle, ExternalLink,
+  FileText, Upload, Key, Eye, EyeOff, Save, HelpCircle, ExternalLink, Filter,
 } from 'lucide-react'
 import {
   useAgents, useAgentActivity, useModels,
@@ -51,7 +51,14 @@ const ACTION_COLORS: Record<string, string> = {
   manual_post: 'text-purple-400',
   peer_interact: 'text-violet-400',
   thread_reply: 'text-sky-400',
+  skipped_reply: 'text-gray-600',
+  skipped_comment: 'text-gray-600',
+  skipped_thread: 'text-gray-600',
+  skipped_post: 'text-gray-600',
+  skipped_peer_comment: 'text-gray-600',
 }
+
+const SKIPPED_ACTIONS = new Set(['skipped_reply', 'skipped_comment', 'skipped_thread', 'skipped_post', 'skipped_peer_comment'])
 
 // ── API Key inline editor ────────────────────────────────────────────────────
 
@@ -446,6 +453,7 @@ export function AgentDetail() {
   const interactPeers = useInteractWithPeers()
 
   const [tab, setTab] = useState<'activity' | 'config' | 'heartbeat'>('activity')
+  const [activityFilter, setActivityFilter] = useState<'all' | 'actions' | 'skipped'>('all')
   const [showClaim, setShowClaim] = useState(false)
 
   const agent = agents.data?.find((a: Agent) => a.slot === slotNum)
@@ -594,33 +602,64 @@ export function AgentDetail() {
 
       {/* Tab content */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-        {tab === 'activity' && (
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-gray-400">Recent Activity</h3>
-              {activity.isFetching && <RefreshCw className="w-3.5 h-3.5 text-gray-600 animate-spin" />}
-            </div>
-            {activity.data && activity.data.length > 0 ? (
-              <div className="space-y-0 max-h-[32rem] overflow-y-auto">
-                {activity.data.map((e: ActivityEntry, i: number) => {
-                  const color = ACTION_COLORS[e.action] ?? 'text-gray-400'
-                  const ts = new Date(e.created_at).toLocaleString([], {
-                    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
-                  })
-                  return (
-                    <div key={i} className="flex gap-3 text-xs py-2 border-b border-gray-800 last:border-0">
-                      <span className="text-gray-600 flex-shrink-0 w-32">{ts}</span>
-                      <span className={`${color} flex-shrink-0 w-28`}>{e.action}</span>
-                      <span className="text-gray-400">{e.detail}</span>
-                    </div>
-                  )
-                })}
+        {tab === 'activity' && (() => {
+          const filtered = (activity.data ?? []).filter((e: ActivityEntry) => {
+            if (activityFilter === 'all') return true
+            if (activityFilter === 'skipped') return SKIPPED_ACTIONS.has(e.action)
+            return !SKIPPED_ACTIONS.has(e.action) // 'actions'
+          })
+          const skippedCount = (activity.data ?? []).filter((e: ActivityEntry) => SKIPPED_ACTIONS.has(e.action)).length
+
+          return (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-medium text-gray-400">Recent Activity</h3>
+                  {skippedCount > 0 && (
+                    <span className="text-[10px] text-gray-600">{skippedCount} skipped</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-0.5">
+                    {(['all', 'actions', 'skipped'] as const).map(f => (
+                      <button key={f} onClick={() => setActivityFilter(f)}
+                        className={`text-[10px] px-2 py-1 rounded-md transition-colors ${
+                          activityFilter === f
+                            ? 'bg-gray-700 text-gray-200'
+                            : 'text-gray-500 hover:text-gray-300'
+                        }`}>
+                        {f === 'all' ? 'All' : f === 'actions' ? 'Actions' : 'Skipped'}
+                      </button>
+                    ))}
+                  </div>
+                  {activity.isFetching && <RefreshCw className="w-3.5 h-3.5 text-gray-600 animate-spin" />}
+                </div>
               </div>
-            ) : (
-              <p className="text-sm text-gray-600 py-4 text-center">No activity yet. Start the agent and trigger a heartbeat.</p>
-            )}
-          </div>
-        )}
+              {filtered.length > 0 ? (
+                <div className="space-y-0 max-h-[32rem] overflow-y-auto">
+                  {filtered.map((e: ActivityEntry, i: number) => {
+                    const isSkipped = SKIPPED_ACTIONS.has(e.action)
+                    const color = ACTION_COLORS[e.action] ?? 'text-gray-400'
+                    const ts = new Date(e.created_at).toLocaleString([], {
+                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+                    })
+                    return (
+                      <div key={i} className={`flex gap-3 text-xs py-2 border-b border-gray-800 last:border-0 ${isSkipped ? 'opacity-60' : ''}`}>
+                        <span className="text-gray-600 flex-shrink-0 w-32">{ts}</span>
+                        <span className={`${color} flex-shrink-0 w-28`}>{e.action}</span>
+                        <span className="text-gray-400">{e.detail}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-600 py-4 text-center">
+                  {activityFilter === 'skipped' ? 'No skipped actions logged.' : 'No activity yet. Start the agent and trigger a heartbeat.'}
+                </p>
+              )}
+            </div>
+          )
+        })()}
 
         {tab === 'config' && models.data && (
           <ConfigEditor agent={agent} models={models.data} />
