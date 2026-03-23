@@ -46,6 +46,10 @@ API_BASE = "https://www.moltbook.com/api/v1"
 
 # Global agent runners (slot 1-6)
 runners: dict[int, AgentRunner] = {}
+# Dedicated connection for advisory locks (survives pool recycling)
+_lock_conn: Optional[asyncpg.Connection] = None
+# Lock namespace: 0xECD1 (ecdysis) to avoid collisions with other apps
+LOCK_NAMESPACE = 0xECD1
 
 # ── Prometheus metrics ────────────────────────────────────────────────────────
 
@@ -100,35 +104,59 @@ def _make_runner(config: AgentConfig, pool: asyncpg.Pool, ollama_base: str) -> A
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
 
+async def _try_acquire_agent_lock(conn: asyncpg.Connection, slot: int) -> bool:
+    """Try to acquire a Postgres advisory lock for an agent slot.
+    Returns True if lock acquired, False if another pod holds it."""
+    row = await conn.fetchrow(
+        "SELECT pg_try_advisory_lock($1, $2) AS acquired",
+        LOCK_NAMESPACE, slot,
+    )
+    return row["acquired"]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _lock_conn
     pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
     app.state.db = pool
     await db.init_db(pool)
     logger.info("Database connected: %s", DATABASE_URL)
 
-    # Auto-start enabled moltbook agents from DB
+    # Dedicated connection for advisory locks (not from pool)
+    _lock_conn = await asyncpg.connect(DATABASE_URL)
+    logger.info("Advisory lock connection established")
+
+    # Auto-start enabled agents, acquiring advisory locks first
     for row in await db.get_all_moltbook_configs(pool):
         if row["enabled"] and row["api_key"]:
+            slot = row["slot"]
+            if not await _try_acquire_agent_lock(_lock_conn, slot):
+                logger.info(
+                    "Slot %d locked by another pod, skipping", slot
+                )
+                continue
             config = config_from_db(row)
             try:
                 ollama_base = await _get_runner_ollama_base(pool, row.get("llm_runner_id"))
             except HTTPException:
                 logger.warning(
-                    "No runners available for slot %d, deferring start", row["slot"]
+                    "No runners available for slot %d, deferring start", slot
                 )
                 continue
             r = _make_runner(config, pool, ollama_base)
             runners[config.slot] = r
             r.start()
             logger.info(
-                "Auto-started moltbook agent %d (%s)", config.slot, config.persona.name
+                "Auto-started moltbook agent %d (%s) [lock acquired]",
+                config.slot, config.persona.name,
             )
 
     yield
 
     for r in runners.values():
         r.stop()
+    if _lock_conn:
+        await _lock_conn.close()  # releases all advisory locks
     await pool.close()
 
 
@@ -184,6 +212,7 @@ async def get_moltbook_agents():
             "schedule": {
                 "post_interval_minutes": row["post_interval_minutes"],
                 "heartbeat_interval_minutes": row.get("heartbeat_interval_minutes", 30),
+                "heartbeat_jitter_pct": row.get("heartbeat_jitter_pct", 20),
                 "active_hours_start": row["active_hours_start"],
                 "active_hours_end": row["active_hours_end"],
             },
@@ -269,7 +298,7 @@ async def update_moltbook_agent(slot: int, req: AgentUpdateRequest):
             updates["topics"] = req.persona["topics"]
 
     if req.schedule:
-        for field in ("post_interval_minutes", "heartbeat_interval_minutes", "active_hours_start", "active_hours_end"):
+        for field in ("post_interval_minutes", "heartbeat_interval_minutes", "heartbeat_jitter_pct", "active_hours_start", "active_hours_end"):
             if field in req.schedule:
                 updates[field] = req.schedule[field]
 
@@ -318,6 +347,9 @@ async def start_moltbook_agent(slot: int):
         raise HTTPException(status_code=400, detail="Agent not registered — no API key")
     if slot in runners and runners[slot].running:
         return {"ok": True, "message": "Already running"}
+    # Acquire advisory lock for this slot
+    if _lock_conn and not await _try_acquire_agent_lock(_lock_conn, slot):
+        raise HTTPException(409, "Agent is running on another pod")
     config = config_from_db(row)
     try:
         ollama_base = await _get_runner_ollama_base(pool, row.get("llm_runner_id"))
@@ -336,6 +368,11 @@ async def stop_moltbook_agent(slot: int):
     if slot in runners:
         runners[slot].stop()
         del runners[slot]
+    # Release advisory lock
+    if _lock_conn:
+        await _lock_conn.execute(
+            "SELECT pg_advisory_unlock($1, $2)", LOCK_NAMESPACE, slot
+        )
     await db.upsert_moltbook_config(pool, slot, enabled=False)
     return {"ok": True, "message": f"Agent {slot} stopped"}
 

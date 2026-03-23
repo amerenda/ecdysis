@@ -353,6 +353,7 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
     topics: agent.persona.topics.join(', '),
     post_interval_minutes: agent.schedule.post_interval_minutes,
     heartbeat_interval_minutes: agent.schedule.heartbeat_interval_minutes,
+    heartbeat_jitter_pct: agent.schedule.heartbeat_jitter_pct,
     active_hours_start: agent.schedule.active_hours_start,
     active_hours_end: agent.schedule.active_hours_end,
     max_post_length: agent.behavior.max_post_length,
@@ -387,6 +388,7 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
         schedule: {
           post_interval_minutes: form.post_interval_minutes,
           heartbeat_interval_minutes: form.heartbeat_interval_minutes,
+          heartbeat_jitter_pct: form.heartbeat_jitter_pct,
           active_hours_start: form.active_hours_start,
           active_hours_end: form.active_hours_end,
         },
@@ -468,10 +470,17 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
       </div>
 
       {/* Jitter */}
-      <div>
-        <label className="text-xs text-gray-500 mb-1 block">Post jitter ({form.post_jitter_pct}%)</label>
-        <input type="range" min={0} max={50} step={5} value={form.post_jitter_pct}
-          onChange={e => setForm(f => ({ ...f, post_jitter_pct: +e.target.value }))} className="w-full accent-brand-500" />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="flex items-center text-xs text-gray-500 mb-1">Post jitter ({form.post_jitter_pct}%) <Tip text="Randomizes the interval between new posts. 20% on a 120-min interval = 96-144 min." /></label>
+          <input type="range" min={0} max={50} step={5} value={form.post_jitter_pct}
+            onChange={e => setForm(f => ({ ...f, post_jitter_pct: +e.target.value }))} className="w-full accent-brand-500" />
+        </div>
+        <div>
+          <label className="flex items-center text-xs text-gray-500 mb-1">Heartbeat jitter ({form.heartbeat_jitter_pct}%) <Tip text="Randomizes time between heartbeats (reading, liking, commenting). 20% on 30 min = 24-36 min." /></label>
+          <input type="range" min={0} max={50} step={5} value={form.heartbeat_jitter_pct}
+            onChange={e => setForm(f => ({ ...f, heartbeat_jitter_pct: +e.target.value }))} className="w-full accent-brand-500" />
+        </div>
       </div>
 
       {/* Target submolts */}

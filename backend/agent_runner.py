@@ -580,8 +580,8 @@ class AgentRunner:
                 await self.run_heartbeat()
                 base_interval = getattr(self.config.schedule, 'heartbeat_interval_minutes', 30) * 60
                 base_interval = base_interval or DEFAULT_HEARTBEAT_INTERVAL
-                jitter_pct = self.config.behavior.post_jitter_pct / 100
-                jitter = 1.0 + random.uniform(-jitter_pct, jitter_pct)
+                hb_jitter_pct = getattr(self.config.schedule, 'heartbeat_jitter_pct', 20) / 100
+                jitter = 1.0 + random.uniform(-hb_jitter_pct, hb_jitter_pct)
                 await asyncio.sleep(base_interval * jitter)
         except asyncio.CancelledError:
             pass

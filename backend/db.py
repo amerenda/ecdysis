@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS moltbook_configs (
     llm_runner_id INT,
     post_interval_minutes INT NOT NULL DEFAULT 120,
     heartbeat_interval_minutes INT NOT NULL DEFAULT 30,
+    heartbeat_jitter_pct INT NOT NULL DEFAULT 20,
     active_hours_start INT NOT NULL DEFAULT 8,
     active_hours_end INT NOT NULL DEFAULT 22,
     max_post_length INT NOT NULL DEFAULT 280,
@@ -134,6 +135,15 @@ async def init_db(pool: asyncpg.Pool) -> None:
             except asyncpg.DuplicateColumnError:
                 pass
 
+        # Migration: add heartbeat_jitter_pct
+        try:
+            await conn.execute(
+                "ALTER TABLE moltbook_configs ADD COLUMN heartbeat_jitter_pct INT NOT NULL DEFAULT 20"
+            )
+            logger.info("Added column moltbook_configs.heartbeat_jitter_pct")
+        except asyncpg.DuplicateColumnError:
+            pass
+
         # Migration: add heartbeat_interval_minutes to moltbook_configs
         try:
             await conn.execute(
@@ -204,6 +214,7 @@ def _default_config_dict(slot: int) -> dict:
         "llm_runner_id": None,
         "post_interval_minutes": 120,
         "heartbeat_interval_minutes": 30,
+        "heartbeat_jitter_pct": 20,
         "active_hours_start": 8,
         "active_hours_end": 22,
         "max_post_length": 280,

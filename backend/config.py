@@ -14,6 +14,7 @@ class AgentPersona(BaseModel):
 class AgentSchedule(BaseModel):
     post_interval_minutes: int = 120
     heartbeat_interval_minutes: int = 30
+    heartbeat_jitter_pct: int = 20
     active_hours_start: int = 8
     active_hours_end: int = 22
 
@@ -90,6 +91,7 @@ def config_from_db(row: dict) -> AgentConfig:
     schedule = AgentSchedule(
         post_interval_minutes=row.get("post_interval_minutes", 120),
         heartbeat_interval_minutes=row.get("heartbeat_interval_minutes", 30),
+        heartbeat_jitter_pct=row.get("heartbeat_jitter_pct", 20),
         active_hours_start=row.get("active_hours_start", 8),
         active_hours_end=row.get("active_hours_end", 22),
     )
