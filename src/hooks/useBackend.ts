@@ -34,7 +34,7 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
 export function useHealth() {
   return useQuery({
     queryKey: ['health'],
-    queryFn: () => get<{ ok: boolean; backend: string }>('/health'),
+    queryFn: () => get<{ ok: boolean; backend: string; is_uat?: boolean }>('/health'),
     refetchInterval: 10_000,
     retry: 0,
   })
