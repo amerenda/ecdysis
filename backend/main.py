@@ -69,11 +69,28 @@ def _inc_request(endpoint: str, method: str, status: int):
 
 # ── Runner helpers ────────────────────────────────────────────────────────────
 
+LLM_MANAGER_URL = os.environ.get(
+    "LLM_MANAGER_URL",
+    "http://llm-manager-backend.llm-manager.svc.cluster.local:8081",
+)
 
-async def _get_runner_ollama_base(pool: asyncpg.Pool, runner_id: Optional[int] = None) -> str:
+
+async def _get_runners_from_llm_manager() -> list[dict]:
+    """Fetch active runners from llm-manager API."""
+    async with httpx.AsyncClient(timeout=5) as client:
+        resp = await client.get(f"{LLM_MANAGER_URL}/api/runners")
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def _get_runner_ollama_base(runner_id: Optional[int] = None) -> str:
     """Get Ollama URL for a runner. Replaces the runner port with 11434.
     Ollama always uses plain HTTP regardless of agent protocol."""
-    runners_list = await db.get_active_runners(pool)
+    try:
+        runners_list = await _get_runners_from_llm_manager()
+    except Exception as e:
+        logger.error("Failed to fetch runners from llm-manager: %s", e)
+        raise HTTPException(503, "Cannot reach llm-manager for runner info")
     if not runners_list:
         raise HTTPException(503, "No active llm-runners available")
     if runner_id is not None:
@@ -138,7 +155,7 @@ async def lifespan(app: FastAPI):
                 continue
             config = config_from_db(row)
             try:
-                ollama_base = await _get_runner_ollama_base(pool, row.get("llm_runner_id"))
+                ollama_base = await _get_runner_ollama_base(row.get("llm_runner_id"))
             except HTTPException:
                 logger.warning(
                     "No runners available for slot %d, deferring start", slot
@@ -328,7 +345,7 @@ async def update_moltbook_agent(slot: int, req: AgentUpdateRequest):
     if updated_row["enabled"] and updated_row["api_key"]:
         config = config_from_db(updated_row)
         try:
-            ollama_base = await _get_runner_ollama_base(pool, updated_row.get("llm_runner_id"))
+            ollama_base = await _get_runner_ollama_base(updated_row.get("llm_runner_id"))
             r = _make_runner(config, pool, ollama_base)
             runners[slot] = r
             r.start()
@@ -354,7 +371,7 @@ async def start_moltbook_agent(slot: int):
         raise HTTPException(409, "Agent is running on another pod")
     config = config_from_db(row)
     try:
-        ollama_base = await _get_runner_ollama_base(pool, row.get("llm_runner_id"))
+        ollama_base = await _get_runner_ollama_base(row.get("llm_runner_id"))
     except HTTPException:
         raise HTTPException(503, "No active llm-runners available to start agent")
     r = _make_runner(config, pool, ollama_base)

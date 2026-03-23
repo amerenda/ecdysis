@@ -2,7 +2,6 @@
 Database layer for moltbook-backend.
 Manages only moltbook tables: moltbook_configs, moltbook_state,
 moltbook_activity, moltbook_peer_posts, moltbook_peer_interactions.
-Read-only access to llm_runners for runner lookups.
 """
 import json
 import logging
@@ -152,48 +151,6 @@ async def init_db(pool: asyncpg.Pool) -> None:
             logger.info("Added column moltbook_configs.heartbeat_interval_minutes")
         except asyncpg.DuplicateColumnError:
             pass
-
-
-# ── Read-only access to llm_runners ──────────────────────────────────────────
-
-
-async def get_active_runners(pool: asyncpg.Pool) -> list[dict]:
-    """Return runners seen in the last 90 seconds, ordered by hostname."""
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT id, hostname, address, port, capabilities, last_seen, created_at
-            FROM llm_runners
-            WHERE last_seen > NOW() - INTERVAL '90 seconds'
-            ORDER BY hostname
-            """
-        )
-    result = []
-    for r in rows:
-        d = dict(r)
-        if isinstance(d.get("capabilities"), str):
-            d["capabilities"] = json.loads(d["capabilities"])
-        result.append(d)
-    return result
-
-
-async def get_runner_by_id(pool: asyncpg.Pool, runner_id: int) -> Optional[dict]:
-    """Return a runner by id, or None if not found."""
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            """
-            SELECT id, hostname, address, port, capabilities, last_seen, created_at
-            FROM llm_runners
-            WHERE id = $1
-            """,
-            runner_id,
-        )
-    if row is None:
-        return None
-    d = dict(row)
-    if isinstance(d.get("capabilities"), str):
-        d["capabilities"] = json.loads(d["capabilities"])
-    return d
 
 
 # ── moltbook_configs ─────────────────────────────────────────────────────────
