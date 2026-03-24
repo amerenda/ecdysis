@@ -13,18 +13,19 @@ env:
 
 jobs:
   test:
-    runs-on: arc-runner-set
-    container:
-      image: node:20-alpine
+    runs-on: [self-hosted, mac-mini]
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       - run: npm install
       - run: npm run build
 
   build-and-deploy:
     needs: test
     if: github.event_name != 'pull_request'
-    runs-on: arc-runner-set
+    runs-on: [self-hosted, mac-mini]
     steps:
       - uses: actions/checkout@v6
 
