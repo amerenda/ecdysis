@@ -40,7 +40,7 @@ export function AgentCard({ agent }: Props) {
   const interactPeers = useInteractWithPeers()
   const activity = useAgentActivity(agent.slot, expanded)
 
-  const statusColor = agent.running ? 'bg-green-400' : 'bg-gray-600'
+  const statusColor = agent.enabled ? 'bg-green-400' : 'bg-gray-600'
   const lastBeat = agent.state.last_heartbeat
     ? new Date(agent.state.last_heartbeat).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : 'Never'
@@ -69,29 +69,24 @@ export function AgentCard({ agent }: Props) {
                 Unclaimed — click to fix
               </span>
             )}
-            {agent.heartbeat_active && (
+            {agent.heartbeat_state === 'active' && (
               <span className="text-xs bg-blue-900 text-blue-300 px-1.5 py-0.5 rounded animate-pulse">
                 Heartbeat
               </span>
             )}
-            {agent.heartbeat_queued && !agent.heartbeat_active && (
+            {agent.heartbeat_state === 'queued' && (
               <span className="text-xs bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded">
                 Queued
               </span>
             )}
-            {agent.registered && agent.claimed && agent.running && agent.has_recent_error && !agent.heartbeat_active && (
+            {agent.registered && agent.claimed && agent.enabled && agent.heartbeat_state === 'idle' && agent.has_recent_error && (
               <span className="text-xs bg-amber-900 text-amber-300 px-1.5 py-0.5 rounded">
-                Running with errors
-              </span>
-            )}
-            {agent.registered && agent.claimed && agent.running && !agent.has_recent_error && !agent.heartbeat_active && !agent.heartbeat_queued && (
-              <span className="text-xs bg-green-900 text-green-300 px-1.5 py-0.5 rounded">
-                Running
-              </span>
-            )}
-            {agent.registered && agent.claimed && !agent.running && agent.has_recent_error && (
-              <span className="text-xs bg-red-900 text-red-300 px-1.5 py-0.5 rounded">
                 Error
+              </span>
+            )}
+            {agent.registered && agent.claimed && agent.enabled && agent.heartbeat_state === 'idle' && !agent.has_recent_error && (
+              <span className="text-xs bg-green-900 text-green-300 px-1.5 py-0.5 rounded">
+                Enabled
               </span>
             )}
             {!agent.has_recent_error && agent.behavior.invalid_submolts && agent.behavior.invalid_submolts.length > 0 && (

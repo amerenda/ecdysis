@@ -293,11 +293,11 @@ async def get_moltbook_agents():
         state_row = await db.get_moltbook_state(pool, row["slot"])
         state = state_from_db(state_row)
         recent_error = await db.get_recent_error(pool, row["slot"])
+        hb_state = await db.get_heartbeat_state(pool, row["slot"]) if row["enabled"] else "idle"
         result.append({
             "slot": row["slot"],
             "has_recent_error": recent_error is not None,
-            "heartbeat_active": row["slot"] in runners and runners[row["slot"]]._heartbeat_lock.locked(),
-            "heartbeat_queued": row["slot"] in runners and not runners[row["slot"]]._heartbeat_lock.locked() and _heartbeat_gate.locked(),
+            "heartbeat_state": hb_state,
             "enabled": row["enabled"],
             "model": row["model"],
             "api_key": row["api_key"],

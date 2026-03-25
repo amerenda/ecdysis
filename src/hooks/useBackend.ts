@@ -70,7 +70,7 @@ export function useAgents() {
   return useQuery<Agent[]>({
     queryKey: ['agents'],
     queryFn: () => get('/api/agents'),
-    refetchInterval: 15_000,
+    refetchInterval: 5_000,
   })
 }
 

@@ -65,8 +65,7 @@ export interface Agent {
   registered: boolean
   claimed: boolean
   has_recent_error: boolean
-  heartbeat_active: boolean
-  heartbeat_queued: boolean
+  heartbeat_state: 'idle' | 'active' | 'queued'
   running: boolean
   soul_md: string
   heartbeat_md: string

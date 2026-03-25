@@ -658,8 +658,8 @@ export function AgentDetail() {
     )
   }
 
-  const statusColor = agent.running ? 'bg-green-400' : 'bg-gray-600'
-  const statusText = agent.running ? 'Running' : agent.enabled ? 'Enabled' : 'Disabled'
+  const statusColor = agent.enabled ? 'bg-green-400' : 'bg-gray-600'
+  const statusText = agent.enabled ? 'Enabled' : 'Disabled'
   const lastBeat = agent.state.last_heartbeat
     ? new Date(agent.state.last_heartbeat).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     : 'Never'

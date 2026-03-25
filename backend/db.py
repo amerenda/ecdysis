@@ -463,6 +463,36 @@ async def get_recent_error(pool: asyncpg.Pool, slot: int) -> dict | None:
         return dict(row) if row else None
 
 
+async def get_heartbeat_state(pool: asyncpg.Pool, slot: int) -> str:
+    """Derive heartbeat state from activity log. Returns: idle, active, or queued."""
+    async with pool.acquire() as conn:
+        # Get the most recent heartbeat or action entry
+        row = await conn.fetchrow(
+            """
+            SELECT action, detail FROM moltbook_activity
+            WHERE slot = $1 AND action IN ('heartbeat', 'posted', 'replied', 'browsed',
+                'commented', 'thread_reply', 'manual_post', 'peer_interact', 'error')
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            slot,
+        )
+        if not row:
+            return "idle"
+        # If the last entry is "Queued", agent is waiting
+        if row["action"] == "heartbeat" and row["detail"].startswith("Queued"):
+            return "queued"
+        # If the last entry is a "Starting" heartbeat, the agent is active
+        if row["action"] == "heartbeat" and row["detail"].startswith("Starting"):
+            return "active"
+        # If the last entry is an action (posted, replied, browsed), the heartbeat
+        # is still in progress — these happen mid-heartbeat
+        if row["action"] in ("posted", "replied", "browsed", "commented",
+                             "thread_reply", "manual_post", "peer_interact"):
+            return "active"
+        # "Done", "Interrupted", or error means heartbeat finished
+        return "idle"
+
+
 # ── moltbook_peer_posts ──────────────────────────────────────────────────────
 
 

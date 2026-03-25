@@ -209,6 +209,8 @@ class AgentRunner:
             logger.info("[agent-%d] Heartbeat already in progress, skipping", self.slot)
             return
         async with self._heartbeat_lock:
+            if self._heartbeat_gate.locked():
+                await self.log("heartbeat", "Queued — waiting for another agent")
             async with self._heartbeat_gate:
                 await self._run_heartbeat_inner()
 
