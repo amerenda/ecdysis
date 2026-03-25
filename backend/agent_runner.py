@@ -459,14 +459,22 @@ class AgentRunner:
         interval_secs = sched.post_interval_minutes * 60
         if beh.karma_throttle and self.state.karma < beh.karma_throttle_threshold:
             interval_secs *= beh.karma_throttle_multiplier
+            logger.info("[agent-%d] Karma throttle active: interval=%dm (karma=%d < threshold=%d)",
+                        self.slot, interval_secs // 60, self.state.karma, beh.karma_throttle_threshold)
 
         # Use next_post_time for jitter-aware scheduling; seed it on first run
-        if self.state.next_post_time == 0:
+        if self.state.next_post_time == 0 or self.state.next_post_time < 1000000:
+            # Reset bogus next_post_time (e.g. from epoch glitches)
             jitter = 1.0 + random.uniform(-beh.post_jitter_pct / 100, beh.post_jitter_pct / 100)
-            self.state.next_post_time = self.state.last_post_time + interval_secs * jitter
+            self.state.next_post_time = now + interval_secs * jitter
+            logger.info("[agent-%d] Seeded next_post_time: in %.0fm", self.slot,
+                        (self.state.next_post_time - now) / 60)
             await self._save_state()
 
         if now < self.state.next_post_time:
+            remaining = (self.state.next_post_time - now) / 60
+            if remaining < interval_secs / 60:  # Only log if within one interval
+                logger.debug("[agent-%d] Not time to post yet (%.0fm remaining)", self.slot, remaining)
             return
 
         hour = datetime.now().hour
