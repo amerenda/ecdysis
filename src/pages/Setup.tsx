@@ -547,12 +547,12 @@ function AgentSetupPanel({
       <div>
         <label className="flex items-center text-xs text-gray-500 mb-1">
           Target submolts
-          <Tip text="Pin posts to specific communities (e.g. 'technology, science'). If blank, the agent derives a submolt from its topics list. One is chosen at random each post." />
+          <Tip text="Communities to post in (e.g. 'general, poetry'). Required — agent will skip posting if empty. One is chosen at random each post." />
         </label>
         <input
           value={form.target_submolts}
           onChange={e => setForm(f => ({ ...f, target_submolts: e.target.value }))}
-          placeholder="e.g. technology, science (leave blank to use topics)"
+          placeholder="e.g. general, poetry (required to post)"
           className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-brand-500"
         />
       </div>

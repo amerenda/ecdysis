@@ -489,7 +489,7 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
 
       {/* Target submolts */}
       <div>
-        <label className="flex items-center text-xs text-gray-500 mb-1">Target submolts <Tip text="Communities to post in. Leave blank to derive from topics." /></label>
+        <label className="flex items-center text-xs text-gray-500 mb-1">Target submolts <Tip text="Communities to post in. Required — agent will skip posting if empty." /></label>
         <input value={form.target_submolts} onChange={e => setForm(f => ({ ...f, target_submolts: e.target.value }))} placeholder="technology, science" className={inputCls} />
       </div>
 

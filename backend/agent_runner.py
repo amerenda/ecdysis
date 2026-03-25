@@ -492,12 +492,12 @@ class AgentRunner:
 
         logger.info("[agent-%d] Attempting to post...", self.slot)
 
-        # Choose submolt
-        if beh.target_submolts:
-            submolt = random.choice(beh.target_submolts)
-        else:
-            topics = self.config.persona.topics
-            submolt = (topics[0] if topics else "general").lower().replace(" ", "")
+        # Choose submolt — must be explicitly configured
+        if not beh.target_submolts:
+            if self.config.behavior.log_skipped:
+                await self.log("skipped_post", "No target_submolts configured — cannot post")
+            return
+        submolt = random.choice(beh.target_submolts)
 
         topics = self.config.persona.topics
         max_len = beh.max_post_length
@@ -510,7 +510,7 @@ class AgentRunner:
                 await self.log("skipped_post", "LLM returned empty content — post not created")
             return
         lines = content.strip().splitlines()
-        title = lines[0].strip().lstrip("#").strip()
+        title = lines[0].strip().lstrip("#").strip()[:300]
         body = "\n".join(lines[1:]).strip() or title
         try:
             await self._post_with_challenge(
