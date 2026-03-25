@@ -282,6 +282,7 @@ async def get_moltbook_agents():
                 "karma_throttle_threshold": row["karma_throttle_threshold"],
                 "karma_throttle_multiplier": row["karma_throttle_multiplier"],
                 "target_submolts": row["target_submolts"],
+                "exclude_submolts": row.get("exclude_submolts", []),
                 "auto_dm_approve": row["auto_dm_approve"],
                 "receive_peer_likes": row["receive_peer_likes"],
                 "receive_peer_comments": row["receive_peer_comments"],
@@ -362,7 +363,7 @@ async def update_moltbook_agent(slot: int, req: AgentUpdateRequest):
         for field in (
             "max_post_length", "auto_reply", "auto_like", "reply_to_own_threads",
             "post_jitter_pct", "karma_throttle", "karma_throttle_threshold",
-            "karma_throttle_multiplier", "target_submolts", "auto_dm_approve",
+            "karma_throttle_multiplier", "target_submolts", "exclude_submolts", "auto_dm_approve",
             "receive_peer_likes", "receive_peer_comments", "send_peer_likes",
             "send_peer_comments", "log_skipped",
         ):
