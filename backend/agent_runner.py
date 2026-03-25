@@ -522,6 +522,10 @@ class AgentRunner:
             self.state.next_post_time = now + interval_secs * jitter
             await self._save_state()
             await self.log("posted", f"New post: '{title}' → m/{submolt}")
+        except httpx.HTTPStatusError as e:
+            body = e.response.text[:300] if e.response else ""
+            logger.error("Post error slot %d: %s — %s", self.slot, e, body)
+            await self.log("error", f"Failed to create post: {e.response.status_code} {e.response.reason_phrase} — {body}")
         except Exception as e:
             logger.error("Post error slot %d: %s", self.slot, e)
             await self.log("error", f"Failed to create post: {type(e).__name__}: {e}")

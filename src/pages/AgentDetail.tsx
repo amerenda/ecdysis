@@ -639,6 +639,7 @@ export function AgentDetail() {
   const [tab, setTab] = useState<'activity' | 'config' | 'files'>('activity')
   const [activityFilter, setActivityFilter] = useState<'all' | 'actions' | 'skipped'>('all')
   const [showClaim, setShowClaim] = useState(false)
+  const [dismissedErrorTs, setDismissedErrorTs] = useState<string | null>(null)
 
   const agent = agents.data?.find((a: Agent) => a.slot === slotNum)
 
@@ -792,10 +793,15 @@ export function AgentDetail() {
         const lastError = recentErrors[0]
         const detail = lastError.detail
 
+        // Check if dismissed
+        if (lastError.created_at === dismissedErrorTs) return null
+
         // Generate human-friendly explanation
         let explanation = ''
         if (detail.includes('500 Internal Server Error')) {
           explanation = 'Moltbook\'s server is having issues. This is on their end — the agent will retry on the next heartbeat.'
+        } else if (detail.includes('400 Bad Request') || detail.includes('400 ')) {
+          explanation = 'Moltbook rejected the request. This usually means the post content or submolt name failed validation. Check the error detail for the API response.'
         } else if (detail.includes('404 Not Found')) {
           explanation = 'The Moltbook API endpoint was not found. This can happen during Moltbook maintenance or API changes. Usually resolves on its own.'
         } else if (detail.includes('401') || detail.includes('403')) {
@@ -828,6 +834,15 @@ export function AgentDetail() {
                 <p className="text-xs text-red-300/80 font-mono break-all mb-2">{detail}</p>
                 <p className="text-xs text-gray-400">{explanation}</p>
               </div>
+              <button
+                onClick={() => setDismissedErrorTs(lastError.created_at)}
+                className="text-red-400/60 hover:text-red-300 flex-shrink-0 p-1"
+                title="Dismiss"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
             </div>
           </div>
         )
