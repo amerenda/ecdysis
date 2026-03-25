@@ -148,9 +148,10 @@ async def lifespan(app: FastAPI):
 
     # Set up DB logging handler (captures logs from all loggers to DB)
     from log_handler import setup_db_logging
-    db_log_handler = setup_db_logging(pool)
-    await db_log_handler.start_flush_loop()
-    app.state.db_log_handler = db_log_handler
+    db_log_handlers = setup_db_logging(pool)
+    for h in db_log_handlers:
+        await h.start_flush_loop()
+    app.state.db_log_handlers = db_log_handlers
 
     # Dedicated connection for advisory locks (not from pool)
     _lock_conn = await asyncpg.connect(DATABASE_URL)

@@ -71,30 +71,37 @@ class DbLogHandler(logging.Handler):
             self._flush_task.cancel()
 
 
-def setup_db_logging(pool: asyncpg.Pool) -> DbLogHandler:
-    """Attach DB log handler to capture app logs."""
-    handler = DbLogHandler(pool, source="backend")
-    handler.setFormatter(logging.Formatter("%(message)s"))
+def setup_db_logging(pool: asyncpg.Pool) -> list[DbLogHandler]:
+    """Attach DB log handlers to capture app logs. Returns all handlers for lifecycle."""
+    handlers = []
+    fmt = logging.Formatter("%(message)s")
 
     # Capture WARNING+ from all loggers
-    root = logging.getLogger()
     warning_handler = DbLogHandler(pool, source="backend")
     warning_handler.setLevel(logging.WARNING)
-    warning_handler.setFormatter(logging.Formatter("%(message)s"))
-    root.addHandler(warning_handler)
+    warning_handler.setFormatter(fmt)
+    logging.getLogger().addHandler(warning_handler)
+    handlers.append(warning_handler)
 
     # Capture INFO from agent_runner (heartbeats, posts, errors)
-    agent_logger = logging.getLogger("agent_runner")
     info_handler = DbLogHandler(pool, source="backend")
     info_handler.setLevel(logging.INFO)
-    info_handler.setFormatter(logging.Formatter("%(message)s"))
-    agent_logger.addHandler(info_handler)
+    info_handler.setFormatter(fmt)
+    logging.getLogger("agent_runner").addHandler(info_handler)
+    handlers.append(info_handler)
+
+    # Capture INFO from __main__ (startup, lock, runner selection)
+    main_handler = DbLogHandler(pool, source="backend")
+    main_handler.setLevel(logging.INFO)
+    main_handler.setFormatter(fmt)
+    logging.getLogger("__main__").addHandler(main_handler)
+    handlers.append(main_handler)
 
     # Capture HTTP request logs as "frontend" source
-    uvicorn_access = logging.getLogger("uvicorn.access")
     access_handler = DbLogHandler(pool, source="frontend")
     access_handler.setLevel(logging.INFO)
-    access_handler.setFormatter(logging.Formatter("%(message)s"))
-    uvicorn_access.addHandler(access_handler)
+    access_handler.setFormatter(logging.Formatter("%(client_addr)s - %(request_line)s %(status_code)s"))
+    logging.getLogger("uvicorn.access").addHandler(access_handler)
+    handlers.append(access_handler)
 
-    return info_handler  # return one for lifecycle management
+    return handlers
