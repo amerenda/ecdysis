@@ -462,6 +462,9 @@ class AgentRunner:
         sched = self.config.schedule
         beh = self.config.behavior
         now = time.time()
+        logger.info("[agent-%d] _maybe_post_new: now=%.0f next_post=%.0f diff=%.0fm",
+                    self.slot, now, self.state.next_post_time,
+                    (now - self.state.next_post_time) / 60)
 
         # Determine effective interval with karma throttle
         interval_secs = sched.post_interval_minutes * 60
