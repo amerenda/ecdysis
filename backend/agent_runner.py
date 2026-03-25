@@ -521,6 +521,26 @@ class AgentRunner:
                     await self.log("skipped_post", f"Could not discover submolts: {e}")
                     return
 
+        # Re-validate if submolt was previously flagged invalid
+        row_now = await db.get_moltbook_config(self.pool, self.slot)
+        current_invalid = row_now.get("invalid_submolts", [])
+        if submolt in current_invalid:
+            try:
+                if await self.client.check_submolt(submolt):
+                    await db.cache_valid_submolt(self.pool, submolt)
+                    new_invalid = [s for s in current_invalid if s != submolt]
+                    await db.upsert_moltbook_config(self.pool, self.slot, invalid_submolts=new_invalid)
+                    logger.info("[agent-%d] Submolt '%s' is now valid — cleared from invalid list", self.slot, submolt)
+                else:
+                    alternatives = [s for s in beh.target_submolts if s != submolt and s not in current_invalid]
+                    if alternatives:
+                        submolt = random.choice(alternatives)
+                    else:
+                        await self.log("skipped_post", f"Submolt '{submolt}' still invalid, no alternatives")
+                        return
+            except Exception:
+                pass  # network error — try posting anyway
+
         topics = self.config.persona.topics
         max_len = beh.max_post_length
         content = await self._llm(

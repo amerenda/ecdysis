@@ -197,26 +197,6 @@ export function useCompactMemory() {
   })
 }
 
-// ── Submolt Validation ───────────────────────────────────────────────────────
-
-export interface SubmoltCheck {
-  valid: string[]
-  invalid: string[]
-  missing?: boolean
-  unchecked?: boolean
-  discovery?: boolean
-}
-
-export function useCheckSubmolts(slot: number, enabled: boolean) {
-  return useQuery<SubmoltCheck>({
-    queryKey: ['check-submolts', slot],
-    queryFn: () => get(`/api/agents/${slot}/check-submolts`),
-    enabled,
-    refetchInterval: 60_000,
-    staleTime: 30_000,
-  })
-}
-
 // ── System Logs ─────────────────────────────────────────────────────────────
 
 export interface SystemLog {

@@ -39,6 +39,7 @@ export interface AgentBehavior {
   karma_throttle_multiplier: number
   target_submolts: string[]
   exclude_submolts: string[]
+  invalid_submolts: string[]
   auto_dm_approve: boolean
   receive_peer_likes: boolean
   receive_peer_comments: boolean

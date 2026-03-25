@@ -9,7 +9,6 @@ import {
   useStartAgent, useStopAgent, usePauseAgent, useResumeAgent,
   useTriggerHeartbeat, useInteractWithPeers,
   useUpdateAgent, useClaimStatus, useCompactMemory,
-  useCheckSubmolts,
 } from '../hooks/useBackend'
 import type { Agent, ActivityEntry } from '../types'
 
@@ -642,7 +641,6 @@ export function AgentDetail() {
   const resumeAgent = useResumeAgent()
   const heartbeat = useTriggerHeartbeat()
   const interactPeers = useInteractWithPeers()
-  const submoltCheck = useCheckSubmolts(slotNum, true)
 
   const [tab, setTab] = useState<'activity' | 'config' | 'files'>('activity')
   const [activityFilter, setActivityFilter] = useState<'all' | 'actions' | 'skipped'>('all')
@@ -789,19 +787,19 @@ export function AgentDetail() {
       </div>
 
       {/* Submolt warnings (not dismissable — goes away when fixed) */}
-      {submoltCheck.data && submoltCheck.data.invalid.length > 0 && (
+      {agent.behavior.invalid_submolts && agent.behavior.invalid_submolts.length > 0 && (
         <div className="bg-red-900/20 border border-red-800/50 rounded-xl p-4">
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 rounded-lg bg-red-900/50 flex items-center justify-center flex-shrink-0 mt-0.5">
               <span className="text-red-400 text-sm">!</span>
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-medium text-red-300">Invalid submolt{submoltCheck.data.invalid.length > 1 ? 's' : ''}</h3>
+              <h3 className="text-sm font-medium text-red-300">Invalid submolt{agent.behavior.invalid_submolts.length > 1 ? 's' : ''}</h3>
               <p className="text-xs text-red-300/80 font-mono mt-1">
-                {submoltCheck.data.invalid.map(s => `m/${s}`).join(', ')}
+                {agent.behavior.invalid_submolts.map((s: string) => `m/${s}`).join(', ')}
               </p>
               <p className="text-xs text-gray-400 mt-1">
-                {submoltCheck.data.invalid.length > 1 ? 'These submolts don\'t' : 'This submolt doesn\'t'} exist on Moltbook. Posts targeting {submoltCheck.data.invalid.length > 1 ? 'them' : 'it'} will fail with a 404. Remove or replace in Config.
+                {agent.behavior.invalid_submolts.length > 1 ? 'These submolts don\'t' : 'This submolt doesn\'t'} exist on Moltbook. Posts targeting {agent.behavior.invalid_submolts.length > 1 ? 'them' : 'it'} will fail. Remove or replace in Config.
               </p>
             </div>
           </div>

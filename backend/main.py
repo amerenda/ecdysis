@@ -67,6 +67,28 @@ def _inc_request(endpoint: str, method: str, status: int):
     api_requests_total.labels(endpoint=endpoint, method=method, status=str(status)).inc()
 
 
+async def _validate_submolts(pool, api_key: str, names: list[str]) -> tuple[list[str], list[str]]:
+    """Validate submolt names against cache + Moltbook API. Returns (valid, invalid)."""
+    if not names or not api_key:
+        return [], []
+    cached = await db.get_validated_submolts(pool, names)
+    valid = list(cached & set(names))
+    invalid = []
+    client = MoltbookClient(api_key)
+    for name in names:
+        if name in cached:
+            continue
+        try:
+            if await client.check_submolt(name):
+                valid.append(name)
+                await db.cache_valid_submolt(pool, name)
+            else:
+                invalid.append(name)
+        except Exception:
+            valid.append(name)  # assume valid on error
+    return valid, invalid
+
+
 # ── Runner helpers ────────────────────────────────────────────────────────────
 
 LLM_MANAGER_URL = os.environ.get(
@@ -283,6 +305,7 @@ async def get_moltbook_agents():
                 "karma_throttle_multiplier": row["karma_throttle_multiplier"],
                 "target_submolts": row["target_submolts"],
                 "exclude_submolts": row.get("exclude_submolts", []),
+                "invalid_submolts": row.get("invalid_submolts", []),
                 "auto_dm_approve": row["auto_dm_approve"],
                 "receive_peer_likes": row["receive_peer_likes"],
                 "receive_peer_comments": row["receive_peer_comments"],
@@ -370,6 +393,17 @@ async def update_moltbook_agent(slot: int, req: AgentUpdateRequest):
             if field in req.behavior:
                 updates[field] = req.behavior[field]
 
+    # Validate submolts if target_submolts changed
+    submolt_warnings = []
+    if "target_submolts" in updates and updates["target_submolts"]:
+        row = await db.get_moltbook_config(pool, slot)
+        api_key = updates.get("api_key") or row.get("api_key", "")
+        if api_key:
+            _, submolt_warnings = await _validate_submolts(pool, api_key, updates["target_submolts"])
+        updates["invalid_submolts"] = submolt_warnings
+    elif "target_submolts" in updates:
+        updates["invalid_submolts"] = []
+
     if updates:
         await db.upsert_moltbook_config(pool, slot, **updates)
 
@@ -390,7 +424,7 @@ async def update_moltbook_agent(slot: int, req: AgentUpdateRequest):
         except HTTPException:
             logger.warning("No runners available for slot %d after update", slot)
 
-    return {"ok": True}
+    return {"ok": True, "invalid_submolts": submolt_warnings}
 
 
 # ── Moltbook agent lifecycle ─────────────────────────────────────────────────
@@ -486,38 +520,6 @@ async def interact_with_peers(slot: int):
 @app.get("/api/agents/{slot}/activity")
 async def get_agent_activity(slot: int, n: int = 50):
     return await db.read_moltbook_activity(app.state.db, slot, n)
-
-
-@app.get("/api/agents/{slot}/check-submolts")
-async def check_submolts(slot: int):
-    """Validate configured target_submolts against Moltbook API (with DB cache)."""
-    pool = app.state.db
-    row = await db.get_moltbook_config(pool, slot)
-    if not row:
-        raise HTTPException(status_code=404)
-    submolts = row.get("target_submolts", [])
-    api_key = row.get("api_key", "")
-    if not submolts:
-        return {"valid": [], "invalid": [], "missing": False, "discovery": True}
-    if not api_key:
-        return {"valid": [], "invalid": [], "missing": False, "unchecked": True}
-    # Check cache first — only call Moltbook API for uncached submolts
-    cached = await db.get_validated_submolts(pool, submolts)
-    valid = list(cached & set(submolts))
-    invalid = []
-    client = MoltbookClient(api_key)
-    for name in submolts:
-        if name in cached:
-            continue
-        try:
-            if await client.check_submolt(name):
-                valid.append(name)
-                await db.cache_valid_submolt(pool, name)
-            else:
-                invalid.append(name)
-        except Exception:
-            valid.append(name)  # assume valid on error to avoid false positives
-    return {"valid": valid, "invalid": invalid, "missing": False}
 
 
 class PostRequest(BaseModel):

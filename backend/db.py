@@ -180,6 +180,15 @@ async def init_db(pool: asyncpg.Pool) -> None:
         except asyncpg.DuplicateColumnError:
             pass
 
+        # Migration: add invalid_submolts to moltbook_configs
+        try:
+            await conn.execute(
+                "ALTER TABLE moltbook_configs ADD COLUMN invalid_submolts JSONB NOT NULL DEFAULT '[]'::jsonb"
+            )
+            logger.info("Added column moltbook_configs.invalid_submolts")
+        except asyncpg.DuplicateColumnError:
+            pass
+
 
 # ── moltbook_configs ─────────────────────────────────────────────────────────
 
@@ -212,6 +221,7 @@ def _default_config_dict(slot: int) -> dict:
         "karma_throttle_multiplier": 2.0,
         "target_submolts": [],
         "exclude_submolts": [],
+        "invalid_submolts": [],
         "auto_dm_approve": False,
         "receive_peer_likes": False,
         "receive_peer_comments": False,
@@ -228,7 +238,7 @@ def _default_config_dict(slot: int) -> dict:
 
 def _row_to_config_dict(row) -> dict:
     d = dict(row)
-    for field in ("topics", "target_submolts", "exclude_submolts"):
+    for field in ("topics", "target_submolts", "exclude_submolts", "invalid_submolts"):
         if isinstance(d.get(field), str):
             d[field] = json.loads(d[field])
     return d
@@ -265,7 +275,7 @@ async def get_all_moltbook_configs(pool: asyncpg.Pool) -> list[dict]:
 async def upsert_moltbook_config(pool: asyncpg.Pool, slot: int, **kwargs) -> None:
     """Insert or update a moltbook agent config. Always sets updated_at=NOW()."""
     # Serialize JSON fields
-    for field in ("topics", "target_submolts", "exclude_submolts"):
+    for field in ("topics", "target_submolts", "exclude_submolts", "invalid_submolts"):
         if field in kwargs and not isinstance(kwargs[field], str):
             kwargs[field] = json.dumps(kwargs[field])
 
