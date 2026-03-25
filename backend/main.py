@@ -98,7 +98,13 @@ async def _get_runner_ollama_base(runner_id: Optional[int] = None) -> str:
         if not r:
             r = runners_list[0]
     else:
-        r = runners_list[0]
+        # Pick the runner with the most VRAM (most likely to have models)
+        def _runner_vram(runner):
+            caps = runner.get("capabilities", {})
+            if isinstance(caps, dict):
+                return caps.get("gpu_vram_total_bytes", 0)
+            return 0
+        r = max(runners_list, key=_runner_vram)
     # runner address is like https://10.x.x.x:8090
     # ollama is on the same host at port 11434, always plain HTTP
     addr = r["address"]
