@@ -495,7 +495,7 @@ async def check_submolts(slot: int):
     submolts = row.get("target_submolts", [])
     api_key = row.get("api_key", "")
     if not submolts:
-        return {"valid": [], "invalid": [], "missing": True}
+        return {"valid": [], "invalid": [], "missing": False, "discovery": True}
     if not api_key:
         return {"valid": [], "invalid": [], "missing": False, "unchecked": True}
     # Check cache first — only call Moltbook API for uncached submolts

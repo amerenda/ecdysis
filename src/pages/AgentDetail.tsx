@@ -370,6 +370,7 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
     karma_throttle_threshold: agent.behavior.karma_throttle_threshold,
     karma_throttle_multiplier: agent.behavior.karma_throttle_multiplier,
     target_submolts: agent.behavior.target_submolts.join(', '),
+    exclude_submolts: agent.behavior.exclude_submolts.join(', '),
     auto_dm_approve: agent.behavior.auto_dm_approve,
     send_peer_likes: agent.behavior.send_peer_likes,
     send_peer_comments: agent.behavior.send_peer_comments,
@@ -407,6 +408,7 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
           karma_throttle_threshold: form.karma_throttle_threshold,
           karma_throttle_multiplier: form.karma_throttle_multiplier,
           target_submolts: form.target_submolts.split(',').map((s: string) => s.trim()).filter(Boolean),
+          exclude_submolts: form.exclude_submolts.split(',').map((s: string) => s.trim()).filter(Boolean),
           auto_dm_approve: form.auto_dm_approve,
           send_peer_likes: form.send_peer_likes,
           send_peer_comments: form.send_peer_comments,
@@ -488,10 +490,14 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
         </div>
       </div>
 
-      {/* Target submolts */}
+      {/* Submolt targeting */}
       <div>
-        <label className="flex items-center text-xs text-gray-500 mb-1">Target submolts <Tip text="Communities to post in. Required — agent will skip posting if empty." /></label>
-        <input value={form.target_submolts} onChange={e => setForm(f => ({ ...f, target_submolts: e.target.value }))} placeholder="technology, science" className={inputCls} />
+        <label className="flex items-center text-xs text-gray-500 mb-1">Target submolts <Tip text="Preferred communities to post in. If empty, the agent discovers submolts automatically from Moltbook." /></label>
+        <input value={form.target_submolts} onChange={e => setForm(f => ({ ...f, target_submolts: e.target.value }))} placeholder="general, philosophy (empty = auto-discover)" className={inputCls} />
+      </div>
+      <div>
+        <label className="flex items-center text-xs text-gray-500 mb-1">Exclude submolts <Tip text="Communities to never post in. Only applies when auto-discovering (target submolts is empty)." /></label>
+        <input value={form.exclude_submolts} onChange={e => setForm(f => ({ ...f, exclude_submolts: e.target.value }))} placeholder="crypto, trading" className={inputCls} />
       </div>
 
       {/* Behavior toggles */}
@@ -783,19 +789,6 @@ export function AgentDetail() {
       </div>
 
       {/* Submolt warnings (not dismissable — goes away when fixed) */}
-      {submoltCheck.data?.missing && agent.registered && (
-        <div className="bg-amber-900/20 border border-amber-800/50 rounded-xl p-4">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-900/50 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <span className="text-amber-400 text-sm">!</span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-medium text-amber-300">No submolts configured</h3>
-              <p className="text-xs text-gray-400 mt-1">Target submolts are required for posting. Go to Config and add at least one submolt (e.g. general, philosophy).</p>
-            </div>
-          </div>
-        </div>
-      )}
       {submoltCheck.data && submoltCheck.data.invalid.length > 0 && (
         <div className="bg-red-900/20 border border-red-800/50 rounded-xl p-4">
           <div className="flex items-start gap-3">

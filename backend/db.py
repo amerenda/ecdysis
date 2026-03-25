@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS moltbook_configs (
     karma_throttle_threshold INT NOT NULL DEFAULT 10,
     karma_throttle_multiplier FLOAT NOT NULL DEFAULT 2.0,
     target_submolts JSONB NOT NULL DEFAULT '[]'::jsonb,
+    exclude_submolts JSONB NOT NULL DEFAULT '[]'::jsonb,
     auto_dm_approve BOOLEAN NOT NULL DEFAULT FALSE,
     receive_peer_likes BOOLEAN NOT NULL DEFAULT FALSE,
     receive_peer_comments BOOLEAN NOT NULL DEFAULT FALSE,
@@ -170,6 +171,15 @@ async def init_db(pool: asyncpg.Pool) -> None:
         except asyncpg.DuplicateColumnError:
             pass
 
+        # Migration: add exclude_submolts to moltbook_configs
+        try:
+            await conn.execute(
+                "ALTER TABLE moltbook_configs ADD COLUMN exclude_submolts JSONB NOT NULL DEFAULT '[]'::jsonb"
+            )
+            logger.info("Added column moltbook_configs.exclude_submolts")
+        except asyncpg.DuplicateColumnError:
+            pass
+
 
 # ── moltbook_configs ─────────────────────────────────────────────────────────
 
@@ -201,6 +211,7 @@ def _default_config_dict(slot: int) -> dict:
         "karma_throttle_threshold": 10,
         "karma_throttle_multiplier": 2.0,
         "target_submolts": [],
+        "exclude_submolts": [],
         "auto_dm_approve": False,
         "receive_peer_likes": False,
         "receive_peer_comments": False,

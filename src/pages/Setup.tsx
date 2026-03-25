@@ -278,6 +278,7 @@ function AgentSetupPanel({
     karma_throttle_threshold: agent.behavior.karma_throttle_threshold,
     karma_throttle_multiplier: agent.behavior.karma_throttle_multiplier,
     target_submolts: agent.behavior.target_submolts.join(', '),
+    exclude_submolts: agent.behavior.exclude_submolts.join(', '),
     auto_dm_approve: agent.behavior.auto_dm_approve,
     receive_peer_likes: agent.behavior.receive_peer_likes,
     receive_peer_comments: agent.behavior.receive_peer_comments,
@@ -315,6 +316,7 @@ function AgentSetupPanel({
           karma_throttle_threshold: form.karma_throttle_threshold,
           karma_throttle_multiplier: form.karma_throttle_multiplier,
           target_submolts: form.target_submolts.split(',').map((s: string) => s.trim()).filter(Boolean),
+          exclude_submolts: form.exclude_submolts.split(',').map((s: string) => s.trim()).filter(Boolean),
           auto_dm_approve: form.auto_dm_approve,
           receive_peer_likes: form.receive_peer_likes,
           receive_peer_comments: form.receive_peer_comments,
@@ -543,16 +545,28 @@ function AgentSetupPanel({
         </p>
       </div>
 
-      {/* Target submolts */}
+      {/* Submolt targeting */}
       <div>
         <label className="flex items-center text-xs text-gray-500 mb-1">
           Target submolts
-          <Tip text="Communities to post in (e.g. 'general, poetry'). Required — agent will skip posting if empty. One is chosen at random each post." />
+          <Tip text="Preferred communities to post in. If empty, the agent discovers submolts automatically from Moltbook. One is chosen at random each post." />
         </label>
         <input
           value={form.target_submolts}
           onChange={e => setForm(f => ({ ...f, target_submolts: e.target.value }))}
-          placeholder="e.g. general, poetry (required to post)"
+          placeholder="general, philosophy (empty = auto-discover)"
+          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-brand-500"
+        />
+      </div>
+      <div>
+        <label className="flex items-center text-xs text-gray-500 mb-1">
+          Exclude submolts
+          <Tip text="Communities to never post in. Only applies when auto-discovering (target submolts is empty)." />
+        </label>
+        <input
+          value={form.exclude_submolts}
+          onChange={e => setForm(f => ({ ...f, exclude_submolts: e.target.value }))}
+          placeholder="crypto, trading"
           className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-brand-500"
         />
       </div>

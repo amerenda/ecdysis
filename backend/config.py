@@ -29,6 +29,7 @@ class AgentBehavior(BaseModel):
     karma_throttle_threshold: int = 10
     karma_throttle_multiplier: float = 2.0
     target_submolts: list[str] = []
+    exclude_submolts: list[str] = []
     auto_dm_approve: bool = False
     receive_peer_likes: bool = False
     receive_peer_comments: bool = False
@@ -105,6 +106,7 @@ def config_from_db(row: dict) -> AgentConfig:
         karma_throttle_threshold=row.get("karma_throttle_threshold", 10),
         karma_throttle_multiplier=row.get("karma_throttle_multiplier", 2.0),
         target_submolts=row.get("target_submolts", []),
+        exclude_submolts=row.get("exclude_submolts", []),
         auto_dm_approve=row.get("auto_dm_approve", False),
         receive_peer_likes=row.get("receive_peer_likes", False),
         receive_peer_comments=row.get("receive_peer_comments", False),

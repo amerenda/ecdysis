@@ -49,6 +49,11 @@ class MoltbookClient:
                 return False
             raise
 
+    async def list_submolts(self) -> list[dict]:
+        """GET /submolts — list all available submolts."""
+        data = await self._get("/submolts")
+        return data.get("submolts", [])
+
     # ── Posts ───────────────────────────────────────────────────────────────
 
     async def create_post(

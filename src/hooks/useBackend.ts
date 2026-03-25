@@ -204,6 +204,7 @@ export interface SubmoltCheck {
   invalid: string[]
   missing?: boolean
   unchecked?: boolean
+  discovery?: boolean
 }
 
 export function useCheckSubmolts(slot: number, enabled: boolean) {

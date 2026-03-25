@@ -492,12 +492,26 @@ class AgentRunner:
 
         logger.info("[agent-%d] Attempting to post...", self.slot)
 
-        # Choose submolt — must be explicitly configured
-        if not beh.target_submolts:
-            if self.config.behavior.log_skipped:
-                await self.log("skipped_post", "No target_submolts configured — cannot post")
-            return
-        submolt = random.choice(beh.target_submolts)
+        # Choose submolt — prefer target list, fall back to discovery
+        if beh.target_submolts:
+            submolt = random.choice(beh.target_submolts)
+        else:
+            try:
+                all_submolts = await self.client.list_submolts()
+                names = [s["name"] for s in all_submolts]
+                excludes = set(beh.exclude_submolts)
+                candidates = [n for n in names if n not in excludes]
+                if not candidates:
+                    await self.log("skipped_post", "No submolts available after applying excludes")
+                    return
+                # Prefer submolts matching agent topics
+                topics_lower = {t.lower() for t in self.config.persona.topics}
+                matched = [n for n in candidates if n.lower() in topics_lower]
+                submolt = random.choice(matched) if matched else random.choice(candidates)
+            except Exception as e:
+                logger.error("Failed to discover submolts for slot %d: %s", self.slot, e)
+                await self.log("skipped_post", f"Could not discover submolts: {e}")
+                return
 
         topics = self.config.persona.topics
         max_len = beh.max_post_length
