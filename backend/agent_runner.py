@@ -30,6 +30,7 @@ class AgentRunner:
         ollama_model: str,
         psk: str = "",
         lock_conn: asyncpg.Connection | None = None,
+        heartbeat_gate: asyncio.Lock | None = None,
     ):
         self.config = config
         self.slot = config.slot
@@ -42,6 +43,7 @@ class AgentRunner:
         self._task: asyncio.Task | None = None
         self.running = False
         self._heartbeat_lock = asyncio.Lock()
+        self._heartbeat_gate = heartbeat_gate or asyncio.Lock()
         self._lock_conn = lock_conn
         self._psk = psk
 
@@ -207,7 +209,8 @@ class AgentRunner:
             logger.info("[agent-%d] Heartbeat already in progress, skipping", self.slot)
             return
         async with self._heartbeat_lock:
-            await self._run_heartbeat_inner()
+            async with self._heartbeat_gate:
+                await self._run_heartbeat_inner()
 
     async def _run_heartbeat_inner(self):
         # Load fresh state from DB each heartbeat

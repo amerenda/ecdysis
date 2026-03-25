@@ -48,6 +48,8 @@ API_BASE = "https://www.moltbook.com/api/v1"
 runners: dict[int, AgentRunner] = {}
 # Dedicated connection for advisory locks (survives pool recycling)
 _lock_conn: Optional[asyncpg.Connection] = None
+# Global heartbeat lock — only one agent runs a heartbeat at a time
+_heartbeat_gate = asyncio.Lock()
 # Lock namespace: 0xECD1 (ecdysis) to avoid collisions with other apps
 LOCK_NAMESPACE = 0xECD1
 
@@ -144,6 +146,7 @@ def _make_runner(config: AgentConfig, pool: asyncpg.Pool, ollama_base: str) -> A
         ollama_model=config.model,
         psk=AGENT_PSK,
         lock_conn=_lock_conn,
+        heartbeat_gate=_heartbeat_gate,
     )
 
 
