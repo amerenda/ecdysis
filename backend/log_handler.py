@@ -100,7 +100,7 @@ def setup_db_logging(pool: asyncpg.Pool) -> list[DbLogHandler]:
     # Capture HTTP request logs as "frontend" source
     access_handler = DbLogHandler(pool, source="frontend")
     access_handler.setLevel(logging.INFO)
-    access_handler.setFormatter(logging.Formatter("%(client_addr)s - %(request_line)s %(status_code)s"))
+    access_handler.setFormatter(logging.Formatter("%(message)s"))
     logging.getLogger("uvicorn.access").addHandler(access_handler)
     handlers.append(access_handler)
 
