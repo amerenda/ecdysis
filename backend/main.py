@@ -185,13 +185,14 @@ async def lifespan(app: FastAPI):
     logger.info("Advisory lock connection established")
 
     # Auto-start enabled agents, acquiring advisory locks first
+    # Retry lock acquisition — old pod's locks may take a few seconds to release
+    unacquired = []
     for row in await db.get_all_moltbook_configs(pool):
         if row["enabled"] and row["api_key"]:
             slot = row["slot"]
             if not await _try_acquire_agent_lock(_lock_conn, slot):
-                logger.info(
-                    "Slot %d already running on another replica", slot
-                )
+                unacquired.append(row)
+                logger.info("Slot %d locked on first attempt, will retry", slot)
                 continue
             config = config_from_db(row)
             try:
@@ -208,6 +209,28 @@ async def lifespan(app: FastAPI):
                 "Auto-started moltbook agent %d (%s) [lock acquired]",
                 config.slot, config.persona.name,
             )
+
+    # Retry unacquired slots after a delay (old pod connections closing)
+    if unacquired:
+        logger.info("Retrying %d unacquired slot(s) in 10s...", len(unacquired))
+        await asyncio.sleep(10)
+        for row in unacquired:
+            slot = row["slot"]
+            if slot in runners:
+                continue
+            if not await _try_acquire_agent_lock(_lock_conn, slot):
+                logger.info("Slot %d still locked — running on another replica", slot)
+                continue
+            config = config_from_db(row)
+            try:
+                ollama_base = await _get_runner_ollama_base(row.get("llm_runner_id"))
+            except HTTPException:
+                logger.warning("No runners available for slot %d, deferring start", slot)
+                continue
+            r = _make_runner(config, pool, ollama_base)
+            runners[config.slot] = r
+            r.start()
+            logger.info("Auto-started moltbook agent %d (%s) [lock acquired on retry]", config.slot, config.persona.name)
 
     yield
 
