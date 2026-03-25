@@ -462,20 +462,17 @@ class AgentRunner:
         sched = self.config.schedule
         beh = self.config.behavior
         now = time.time()
-        logger.info("[agent-%d] _maybe_post_new: now=%.0f next_post=%.0f diff=%.0fm",
+        logger.info("[agent-%d] _maybe_post_new: now=%.0f next_post=%.0f diff=%.0fm last_post=%.0f",
                     self.slot, now, self.state.next_post_time,
-                    (now - self.state.next_post_time) / 60)
+                    (now - self.state.next_post_time) / 60, self.state.last_post_time)
 
         # Determine effective interval with karma throttle
         interval_secs = sched.post_interval_minutes * 60
         if beh.karma_throttle and self.state.karma < beh.karma_throttle_threshold:
             interval_secs *= beh.karma_throttle_multiplier
-            logger.info("[agent-%d] Karma throttle active: interval=%dm (karma=%d < threshold=%d)",
-                        self.slot, interval_secs // 60, self.state.karma, beh.karma_throttle_threshold)
+            logger.info("[agent-%d] Karma throttle active", self.slot)
 
-        # Use next_post_time for jitter-aware scheduling; seed it on first run
         if self.state.next_post_time == 0 or self.state.next_post_time < 1000000:
-            # Reset bogus next_post_time (e.g. from epoch glitches)
             jitter = 1.0 + random.uniform(-beh.post_jitter_pct / 100, beh.post_jitter_pct / 100)
             self.state.next_post_time = now + interval_secs * jitter
             logger.info("[agent-%d] Seeded next_post_time: in %.0fm", self.slot,
@@ -483,14 +480,17 @@ class AgentRunner:
             await self._save_state()
 
         if now < self.state.next_post_time:
-            remaining = (self.state.next_post_time - now) / 60
-            if remaining < interval_secs / 60:  # Only log if within one interval
-                logger.debug("[agent-%d] Not time to post yet (%.0fm remaining)", self.slot, remaining)
+            logger.info("[agent-%d] Not time to post yet (%.0fm remaining)", self.slot,
+                        (self.state.next_post_time - now) / 60)
             return
 
         hour = datetime.now().hour
         if not (sched.active_hours_start <= hour < sched.active_hours_end):
+            logger.info("[agent-%d] Outside active hours (%d not in %d-%d)", self.slot,
+                        hour, sched.active_hours_start, sched.active_hours_end)
             return
+
+        logger.info("[agent-%d] Attempting to post...", self.slot)
 
         # Choose submolt
         if beh.target_submolts:
