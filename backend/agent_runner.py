@@ -697,7 +697,12 @@ class AgentRunner:
                 jitter = 1.0 + random.uniform(-hb_jitter_pct, hb_jitter_pct)
                 await asyncio.sleep(base_interval * jitter)
         except asyncio.CancelledError:
-            pass
+            if self._heartbeat_lock.locked():
+                logger.info("[agent-%d] Heartbeat interrupted — pod shutting down", self.slot)
+                try:
+                    await self.log("heartbeat", "Interrupted — pod shutting down")
+                except Exception:
+                    pass
         finally:
             self.running = False
 
