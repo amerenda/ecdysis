@@ -523,7 +523,8 @@ class AgentRunner:
             await self._save_state()
             await self.log("posted", f"New post: '{title}' → m/{submolt}")
         except Exception as e:
-            logger.error("Post error: %s", e)
+            logger.error("Post error slot %d: %s", self.slot, e)
+            await self.log("error", f"Failed to create post: {type(e).__name__}: {e}")
 
     async def _update_peer_db(self, peer_names: list[str] | None = None) -> None:
         """Scan feed and record posts from peer agents. If peer_names is None, tracks all non-self authors."""
