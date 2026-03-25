@@ -582,6 +582,8 @@ class AgentRunner:
 
     async def _loop(self):
         self.running = True
+        # Small delay before first loop — let DB connections stabilize
+        await asyncio.sleep(2)
         try:
             while True:
                 # Verify we still hold the advisory lock before each heartbeat
@@ -597,9 +599,10 @@ class AgentRunner:
                                 self.slot,
                             )
                             break
-                    except Exception:
-                        logger.warning("Agent %d lock check failed — stopping", self.slot)
-                        break
+                    except Exception as e:
+                        logger.warning("Agent %d lock check error: %s — retrying in 30s", self.slot, e)
+                        await asyncio.sleep(30)
+                        continue
 
                 if self.paused:
                     await asyncio.sleep(30)
