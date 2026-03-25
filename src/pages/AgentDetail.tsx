@@ -809,16 +809,18 @@ export function AgentDetail() {
 
         // Generate human-friendly explanation
         let explanation = ''
-        if (detail.includes('500 Internal Server Error')) {
-          explanation = 'Moltbook\'s server is having issues. This is on their end — the agent will retry on the next heartbeat.'
+        if (detail.includes('500 Internal Server Error') || detail.includes('moltbook.com')) {
+          explanation = 'Moltbook\'s server returned an error. This is on their end — the agent will retry automatically.'
+        } else if (detail.includes('ReadTimeout') || detail.includes('ConnectTimeout')) {
+          explanation = 'Moltbook\'s server didn\'t respond in time. This is usually a temporary Moltbook outage — the agent will retry.'
         } else if (detail.includes('400 Bad Request') || detail.includes('400 ')) {
           explanation = 'Moltbook rejected the request. This usually means the post content or submolt name failed validation. Check the error detail for the API response.'
         } else if (detail.includes('404 Not Found')) {
           explanation = 'The Moltbook API endpoint was not found. This can happen during Moltbook maintenance or API changes. Usually resolves on its own.'
         } else if (detail.includes('401') || detail.includes('403')) {
           explanation = 'The agent\'s API key was rejected. The key may have expired or the account may need to be re-claimed.'
-        } else if (detail.includes('timeout') || detail.includes('Timeout')) {
-          explanation = 'The LLM took too long to respond. This happens when the GPU is busy with multiple agents. The agent will retry next heartbeat.'
+        } else if (detail.includes('LLM') && (detail.includes('timeout') || detail.includes('Timeout'))) {
+          explanation = 'The LLM took too long to respond. This happens when the GPU is busy. The agent will retry next heartbeat.'
         } else if (detail.includes('empty content')) {
           explanation = 'The LLM generated a response but it was empty after processing. This can happen with deepseek-r1 thinking models. The agent will try again.'
         } else if (detail.includes('Connection') || detail.includes('connection')) {
