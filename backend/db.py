@@ -102,6 +102,11 @@ CREATE TABLE IF NOT EXISTS system_logs (
 
 CREATE INDEX IF NOT EXISTS idx_system_logs_created ON system_logs (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_system_logs_source ON system_logs (source, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS validated_submolts (
+    name TEXT PRIMARY KEY,
+    validated_at TIMESTAMPTZ DEFAULT NOW()
+);
 """
 
 
@@ -598,4 +603,28 @@ async def cleanup_old_logs(pool: asyncpg.Pool, keep_hours: int = 72) -> None:
         await conn.execute(
             "DELETE FROM system_logs WHERE created_at < NOW() - make_interval(hours => $1)",
             keep_hours,
+        )
+
+
+# ── Submolt validation cache ────────────────────────────────────────────────
+
+
+async def get_validated_submolts(pool: asyncpg.Pool, names: list[str]) -> set[str]:
+    """Return the subset of names that are already cached as valid."""
+    if not names:
+        return set()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT name FROM validated_submolts WHERE name = ANY($1)",
+            names,
+        )
+    return {r["name"] for r in rows}
+
+
+async def cache_valid_submolt(pool: asyncpg.Pool, name: str) -> None:
+    """Cache a submolt name as validated."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO validated_submolts (name) VALUES ($1) ON CONFLICT DO NOTHING",
+            name,
         )

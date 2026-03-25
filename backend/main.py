@@ -487,7 +487,7 @@ async def get_agent_activity(slot: int, n: int = 50):
 
 @app.get("/api/agents/{slot}/check-submolts")
 async def check_submolts(slot: int):
-    """Validate configured target_submolts against Moltbook API."""
+    """Validate configured target_submolts against Moltbook API (with DB cache)."""
     pool = app.state.db
     row = await db.get_moltbook_config(pool, slot)
     if not row:
@@ -498,13 +498,18 @@ async def check_submolts(slot: int):
         return {"valid": [], "invalid": [], "missing": True}
     if not api_key:
         return {"valid": [], "invalid": [], "missing": False, "unchecked": True}
-    client = MoltbookClient(api_key)
-    valid = []
+    # Check cache first — only call Moltbook API for uncached submolts
+    cached = await db.get_validated_submolts(pool, submolts)
+    valid = list(cached & set(submolts))
     invalid = []
+    client = MoltbookClient(api_key)
     for name in submolts:
+        if name in cached:
+            continue
         try:
             if await client.check_submolt(name):
                 valid.append(name)
+                await db.cache_valid_submolt(pool, name)
             else:
                 invalid.append(name)
         except Exception:
