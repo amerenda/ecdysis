@@ -18,6 +18,9 @@ class MoltbookClient:
     async def _get(self, path: str, params: dict = None) -> dict:
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.get(f"{API_BASE}{path}", headers=self._headers, params=params)
+            if r.status_code >= 400:
+                body = r.text[:500]
+                logger.error("Moltbook API error %d on GET %s: %s", r.status_code, path, body)
             r.raise_for_status()
             return r.json()
 

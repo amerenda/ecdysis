@@ -246,9 +246,15 @@ class AgentRunner:
             await self._update_memory()
 
             await self.log("heartbeat", f"Done — karma: {self.state.karma}")
+        except httpx.HTTPStatusError as e:
+            body = e.response.text[:300] if e.response else ""
+            detail = f"{e.response.status_code} {e.response.reason_phrase} on {e.request.url.path} — {body}"
+            logger.error("Heartbeat error slot %d: %s", self.slot, detail)
+            await self.log("error", detail)
         except Exception as e:
-            logger.error("Heartbeat error slot %d: %s", self.slot, e)
-            await self.log("error", str(e))
+            detail = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+            logger.error("Heartbeat error slot %d: %s", self.slot, detail)
+            await self.log("error", detail)
 
     async def _update_memory(self):
         """Append a short summary of this heartbeat to MEMORY.md."""
