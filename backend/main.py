@@ -266,8 +266,10 @@ async def get_moltbook_agents():
     for row in configs:
         state_row = await db.get_moltbook_state(pool, row["slot"])
         state = state_from_db(state_row)
+        recent_error = await db.get_recent_error(pool, row["slot"])
         result.append({
             "slot": row["slot"],
+            "has_recent_error": recent_error is not None,
             "enabled": row["enabled"],
             "model": row["model"],
             "api_key": row["api_key"],

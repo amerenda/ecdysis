@@ -64,6 +64,7 @@ export interface Agent {
   api_key: string
   registered: boolean
   claimed: boolean
+  has_recent_error: boolean
   running: boolean
   paused: boolean
   soul_md: string

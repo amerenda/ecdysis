@@ -435,6 +435,33 @@ async def read_moltbook_activity(
     return [dict(r) for r in rows]
 
 
+async def get_recent_error(pool: asyncpg.Pool, slot: int) -> dict | None:
+    """Return the most recent error within the last 4 heartbeats, or None."""
+    async with pool.acquire() as conn:
+        # Find the 4th-most-recent "Done" heartbeat as the cutoff
+        cutoff_row = await conn.fetchrow(
+            """
+            SELECT created_at FROM moltbook_activity
+            WHERE slot = $1 AND action = 'heartbeat' AND detail LIKE 'Done%%'
+            ORDER BY created_at DESC OFFSET 3 LIMIT 1
+            """,
+            slot,
+        )
+        cutoff = cutoff_row["created_at"] if cutoff_row else None
+        # Find most recent error after that cutoff
+        query = """
+            SELECT action, detail, created_at FROM moltbook_activity
+            WHERE slot = $1 AND action = 'error'
+        """
+        params: list = [slot]
+        if cutoff:
+            query += " AND created_at >= $2"
+            params.append(cutoff)
+        query += " ORDER BY created_at DESC LIMIT 1"
+        row = await conn.fetchrow(query, *params)
+        return dict(row) if row else None
+
+
 # ── moltbook_peer_posts ──────────────────────────────────────────────────────
 
 

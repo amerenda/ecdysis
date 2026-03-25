@@ -70,6 +70,16 @@ export function AgentCard({ agent }: Props) {
                 Unclaimed — click to fix
               </span>
             )}
+            {agent.has_recent_error && (
+              <span className="text-xs bg-red-900 text-red-300 px-1.5 py-0.5 rounded">
+                Error
+              </span>
+            )}
+            {!agent.has_recent_error && agent.behavior.invalid_submolts && agent.behavior.invalid_submolts.length > 0 && (
+              <span className="text-xs bg-amber-900 text-amber-300 px-1.5 py-0.5 rounded">
+                Warning
+              </span>
+            )}
           </div>
           <p className="text-xs text-gray-500 truncate">{agent.model}</p>
         </div>
