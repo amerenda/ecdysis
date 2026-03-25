@@ -947,7 +947,11 @@ export function AgentDetail() {
               const idMatch = e.detail.match(/\[([0-9a-f-]{36})\]/)
               const replyIdMatch = e.detail.match(/on ([0-9a-f-]{36})/)
               const postId = idMatch?.[1] || replyIdMatch?.[1]
-              const url = postId ? `https://www.moltbook.com/post/${postId}` : null
+              // For posts without ID, link to the submolt page
+              const submoltMatch = e.detail.match(/→ m\/(\S+)/)
+              const url = postId
+                ? `https://www.moltbook.com/post/${postId}`
+                : submoltMatch ? `https://www.moltbook.com/m/${submoltMatch[1]}` : null
               const isPost = e.action === 'posted' || e.action === 'manual_post'
               return (
                 <div key={i} className="flex items-start gap-3 px-3 py-2 rounded-lg hover:bg-gray-800/30">
@@ -956,13 +960,11 @@ export function AgentDetail() {
                     {isPost ? 'Posted' : 'Replied'}
                   </span>
                   <span className="text-xs text-gray-300 flex-1 break-all">{e.detail}</span>
-                  {url ? (
+                  {url && (
                     <a href={url} target="_blank" rel="noopener noreferrer"
                       className="text-xs text-brand-400 hover:text-brand-300 whitespace-nowrap flex-shrink-0">
-                      View
+                      {postId ? 'View' : `m/${submoltMatch?.[1]}`}
                     </a>
-                  ) : (
-                    <span className="text-[10px] text-gray-700 whitespace-nowrap flex-shrink-0">no link</span>
                   )}
                 </div>
               )
