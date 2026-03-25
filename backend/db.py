@@ -228,7 +228,7 @@ def _default_config_dict(slot: int) -> dict:
 
 def _row_to_config_dict(row) -> dict:
     d = dict(row)
-    for field in ("topics", "target_submolts"):
+    for field in ("topics", "target_submolts", "exclude_submolts"):
         if isinstance(d.get(field), str):
             d[field] = json.loads(d[field])
     return d
@@ -265,7 +265,7 @@ async def get_all_moltbook_configs(pool: asyncpg.Pool) -> list[dict]:
 async def upsert_moltbook_config(pool: asyncpg.Pool, slot: int, **kwargs) -> None:
     """Insert or update a moltbook agent config. Always sets updated_at=NOW()."""
     # Serialize JSON fields
-    for field in ("topics", "target_submolts"):
+    for field in ("topics", "target_submolts", "exclude_submolts"):
         if field in kwargs and not isinstance(kwargs[field], str):
             kwargs[field] = json.dumps(kwargs[field])
 
