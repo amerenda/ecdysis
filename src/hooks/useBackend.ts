@@ -197,6 +197,31 @@ export function useCompactMemory() {
   })
 }
 
+// ── System Logs ─────────────────────────────────────────────────────────────
+
+export interface SystemLog {
+  id: number
+  source: string
+  level: string
+  logger_name: string
+  message: string
+  pod_name: string
+  created_at: string
+}
+
+export function useSystemLogs(source?: string, level?: string) {
+  const params = new URLSearchParams()
+  if (source) params.set('source', source)
+  if (level) params.set('level', level)
+  params.set('limit', '200')
+  const query = params.toString()
+  return useQuery<SystemLog[]>({
+    queryKey: ['system-logs', source, level],
+    queryFn: () => get(`/api/logs?${query}`),
+    refetchInterval: 5_000,
+  })
+}
+
 export function useResetDatabase() {
   const qc = useQueryClient()
   return useMutation({

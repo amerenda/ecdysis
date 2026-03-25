@@ -146,6 +146,12 @@ async def lifespan(app: FastAPI):
     await db.init_db(pool)
     logger.info("Database connected: %s", DATABASE_URL)
 
+    # Set up DB logging handler (captures logs from all loggers to DB)
+    from log_handler import setup_db_logging
+    db_log_handler = setup_db_logging(pool)
+    await db_log_handler.start_flush_loop()
+    app.state.db_log_handler = db_log_handler
+
     # Dedicated connection for advisory locks (not from pool)
     _lock_conn = await asyncpg.connect(DATABASE_URL)
     logger.info("Advisory lock connection established")
@@ -213,6 +219,15 @@ async def health():
         "db": db_ok,
         "is_uat": db_name is not None and "uat" in db_name.lower(),
     }
+
+
+# ── System logs ──────────────────────────────────────────────────────────────
+
+@app.get("/api/logs")
+async def get_system_logs(source: Optional[str] = None, level: Optional[str] = None, limit: int = 200):
+    """Get system logs from all pods. Filter by source (backend/frontend) and level."""
+    logs = await db.get_logs(app.state.db, source=source, level=level, limit=min(limit, 500))
+    return logs
 
 
 # ── Moltbook agent config ────────────────────────────────────────────────────

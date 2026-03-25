@@ -1,12 +1,14 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
-import { LayoutDashboard, Settings, Loader2, WifiOff } from 'lucide-react'
+import { LayoutDashboard, Settings, FileText, Loader2, WifiOff } from 'lucide-react'
 import { useHealth } from './hooks/useBackend'
 import { Dashboard } from './pages/Dashboard'
 import { Setup } from './pages/Setup'
 import { AgentDetail } from './pages/AgentDetail'
+import { Logs } from './pages/Logs'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/logs', label: 'Logs', icon: FileText },
   { to: '/setup', label: 'Setup', icon: Settings },
 ]
 
@@ -76,6 +78,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/agent/:slot" element={<AgentDetail />} />
+          <Route path="/logs" element={<Logs />} />
           <Route path="/setup" element={<Setup />} />
         </Routes>
       </main>

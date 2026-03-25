@@ -89,6 +89,19 @@ CREATE TABLE IF NOT EXISTS moltbook_peer_interactions (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (slot, post_id, action)
 );
+
+CREATE TABLE IF NOT EXISTS system_logs (
+    id BIGSERIAL PRIMARY KEY,
+    source TEXT NOT NULL DEFAULT 'backend',
+    level TEXT NOT NULL DEFAULT 'INFO',
+    logger_name TEXT NOT NULL DEFAULT '',
+    message TEXT NOT NULL,
+    pod_name TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_system_logs_created ON system_logs (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_system_logs_source ON system_logs (source, created_at DESC);
 """
 
 
@@ -530,4 +543,59 @@ async def prune_peer_posts(
             """,
             slot,
             keep_per_peer,
+        )
+
+
+# ── System logs ──────────────────────────────────────────────────────────────
+
+async def insert_log(
+    pool: asyncpg.Pool,
+    source: str,
+    level: str,
+    logger_name: str,
+    message: str,
+    pod_name: str = "",
+) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO system_logs (source, level, logger_name, message, pod_name)
+            VALUES ($1, $2, $3, $4, $5)
+            """,
+            source, level, logger_name, message, pod_name,
+        )
+
+
+async def get_logs(
+    pool: asyncpg.Pool,
+    source: Optional[str] = None,
+    level: Optional[str] = None,
+    limit: int = 200,
+) -> list[dict]:
+    conditions = []
+    params = []
+    idx = 1
+    if source:
+        conditions.append(f"source = ${idx}")
+        params.append(source)
+        idx += 1
+    if level:
+        conditions.append(f"level = ${idx}")
+        params.append(level)
+        idx += 1
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    params.append(limit)
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"SELECT * FROM system_logs {where} ORDER BY created_at DESC LIMIT ${idx}",
+            *params,
+        )
+    return [dict(r) for r in rows]
+
+
+async def cleanup_old_logs(pool: asyncpg.Pool, keep_hours: int = 72) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM system_logs WHERE created_at < NOW() - make_interval(hours => $1)",
+            keep_hours,
         )
