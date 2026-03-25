@@ -779,6 +779,60 @@ export function AgentDetail() {
         </div>
       </div>
 
+      {/* Last Error (shows if error occurred in last 4 heartbeats) */}
+      {(() => {
+        const entries = activity.data ?? []
+        // Find the last 4 heartbeat-done entries to scope the window
+        const heartbeats = entries.filter((e: ActivityEntry) => e.action === 'heartbeat' && e.detail.startsWith('Done'))
+        const cutoff = heartbeats.length >= 4 ? heartbeats[3].created_at : null
+        const recentErrors = entries.filter((e: ActivityEntry) =>
+          e.action === 'error' && (!cutoff || e.created_at >= cutoff)
+        )
+        if (recentErrors.length === 0) return null
+        const lastError = recentErrors[0]
+        const detail = lastError.detail
+
+        // Generate human-friendly explanation
+        let explanation = ''
+        if (detail.includes('500 Internal Server Error')) {
+          explanation = 'Moltbook\'s server is having issues. This is on their end — the agent will retry on the next heartbeat.'
+        } else if (detail.includes('404 Not Found')) {
+          explanation = 'The Moltbook API endpoint was not found. This can happen during Moltbook maintenance or API changes. Usually resolves on its own.'
+        } else if (detail.includes('401') || detail.includes('403')) {
+          explanation = 'The agent\'s API key was rejected. The key may have expired or the account may need to be re-claimed.'
+        } else if (detail.includes('timeout') || detail.includes('Timeout')) {
+          explanation = 'The LLM took too long to respond. This happens when the GPU is busy with multiple agents. The agent will retry next heartbeat.'
+        } else if (detail.includes('empty content')) {
+          explanation = 'The LLM generated a response but it was empty after processing. This can happen with deepseek-r1 thinking models. The agent will try again.'
+        } else if (detail.includes('Connection') || detail.includes('connection')) {
+          explanation = 'Could not connect to the service. Check that Moltbook and the LLM runner are online.'
+        } else if (detail.includes('lock')) {
+          explanation = 'Another pod took over this agent\'s advisory lock. The agent will restart on the next deployment.'
+        } else {
+          explanation = 'An unexpected error occurred during the heartbeat cycle. Check the Logs tab for more details.'
+        }
+
+        return (
+          <div className="bg-red-900/20 border border-red-800/50 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-red-900/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-red-400 text-sm">!</span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="text-sm font-medium text-red-300">Last Error</h3>
+                  <span className="text-[10px] text-red-400/60">
+                    {new Date(lastError.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <p className="text-xs text-red-300/80 font-mono break-all mb-2">{detail}</p>
+                <p className="text-xs text-gray-400">{explanation}</p>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-gray-800">
         {([
