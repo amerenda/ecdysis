@@ -163,7 +163,7 @@ async def lifespan(app: FastAPI):
             slot = row["slot"]
             if not await _try_acquire_agent_lock(_lock_conn, slot):
                 logger.info(
-                    "Slot %d locked by another pod, skipping", slot
+                    "Slot %d already running on another replica", slot
                 )
                 continue
             config = config_from_db(row)

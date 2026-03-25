@@ -169,6 +169,41 @@ GitHub Actions workflow (`.github/workflows/build.yaml`) runs on Mac Mini ARM64 
 
 The frontend nginx config is managed via a ConfigMap (`ecdysis-nginx`) in the gitops repo, NOT the Dockerfile's `nginx.conf`. Update `k3s-dean-gitops/apps/ecdysis/frontend/configmap-nginx.yaml` to change routing.
 
+## UAT Environment
+
+UAT runs alongside prod in the same namespace with separate services, databases, and nginx routing.
+
+| Component | Prod Service | UAT Service |
+|-----------|-------------|-------------|
+| Frontend | `ecdysis.amer.dev` | `ecdysis-uat.amer.dev` |
+| Backend | `ecdysis-backend:8082` | `ecdysis-backend-uat:8082` |
+| Database | `ecdysis` | `ecdysis_uat` |
+
+UAT nginx routes to UAT backend services and the llm-manager UAT backend (not prod).
+
+### Resetting UAT Database
+
+A k8s Job wipes and seeds the UAT database with test data (6 agent slots, sample activity, system logs). The seed SQL has a safety check that aborts if the database name doesn't contain "uat".
+
+```bash
+# Delete previous job run (if any), then create new one
+kubectl delete job ecdysis-uat-db-reset -n ecdysis --ignore-not-found
+kubectl apply -f k3s-dean-gitops/apps/ecdysis/ecdysis-backend-uat/jobs/reset-db-job.yaml
+kubectl logs -n ecdysis -l app=ecdysis-uat-db-reset -f
+```
+
+Seed data includes:
+- 6 agent slots with test personas (TestBot Alpha through Zeta)
+- Karma values and state for each slot
+- Sample activity log entries (heartbeats, posts, comments, errors)
+- Sample system logs (INFO, WARNING, ERROR)
+
+### Prerequisites
+
+The UAT database and credentials must exist:
+- Cloud SQL database: `ecdysis_uat` with user `ecdysis_uat`
+- Bitwarden secret: `dean-cloud-sql-ecdysis-uat-password` (synced via ExternalSecret to `cloud-sql-postgres-credentials-uat` in the ecdysis namespace)
+
 ## Database
 
 PostgreSQL (Cloud SQL) with tables:
