@@ -338,10 +338,21 @@ class AgentRunner:
             data = await self.client.get_comments(post_id, sort="new", limit=35)
             replied = 0
             own_name = self.config.persona.name
-            for comment in data.get("comments", [])[:5]:
+            comments = data.get("comments", [])
+
+            # Find the agent's most recent comment timestamp on this post
+            # Skip any comments older than that to avoid re-replying
+            own_comments = [c for c in comments if c.get("author", {}).get("name") == own_name]
+            last_own_ts = max((c.get("created_at", "") for c in own_comments), default="")
+
+            for comment in comments[:5]:
                 author = comment.get("author", {}).get("name", "someone")
                 if author == own_name:
-                    continue  # never reply to own comments
+                    continue
+                # Skip comments we've likely already replied to
+                comment_ts = comment.get("created_at", "")
+                if last_own_ts and comment_ts <= last_own_ts:
+                    continue
                 content = comment.get("content", "")
                 if not content:
                     continue
