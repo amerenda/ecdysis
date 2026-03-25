@@ -691,13 +691,7 @@ export function AgentDetail() {
 
           {/* Controls */}
           <div className="flex items-center gap-2">
-            {!agent.running ? (
-              <button onClick={() => start.mutate(agent.slot)} disabled={!agent.registered || start.isPending}
-                className="flex items-center gap-1.5 bg-green-900/50 hover:bg-green-800/50 disabled:opacity-30 text-green-400 text-sm px-3 py-1.5 rounded-lg transition-colors">
-                {start.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                Start
-              </button>
-            ) : (
+            {agent.enabled && (
               <>
                 <button onClick={() => heartbeat.mutate(agent.slot)} disabled={heartbeat.isPending}
                   title="Trigger heartbeat" className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors disabled:opacity-30">
@@ -710,9 +704,16 @@ export function AgentDetail() {
                 <button onClick={() => stop.mutate(agent.slot)} disabled={stop.isPending}
                   className="flex items-center gap-1.5 bg-red-900/50 hover:bg-red-800/50 text-red-400 text-sm px-3 py-1.5 rounded-lg transition-colors">
                   {stop.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4" />}
-                  Stop
+                  Disable
                 </button>
               </>
+            )}
+            {!agent.enabled && agent.registered && (
+              <button onClick={() => start.mutate(agent.slot)} disabled={start.isPending}
+                className="flex items-center gap-1.5 bg-green-900/50 hover:bg-green-800/50 disabled:opacity-30 text-green-400 text-sm px-3 py-1.5 rounded-lg transition-colors">
+                {start.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                Enable
+              </button>
             )}
           </div>
         </div>

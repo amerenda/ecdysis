@@ -471,26 +471,43 @@ async def stop_moltbook_agent(slot: int):
 
 
 
+async def _ensure_runner(slot: int) -> AgentRunner:
+    """Get or create a runner for one-off actions on enabled agents."""
+    if slot in runners:
+        return runners[slot]
+    pool = app.state.db
+    row = await db.get_moltbook_config(pool, slot)
+    if not row or not row.get("api_key"):
+        raise HTTPException(status_code=400, detail="Agent not registered — no API key")
+    config = config_from_db(row)
+    try:
+        ollama_base = await _get_runner_ollama_base(row.get("llm_runner_id"))
+    except HTTPException:
+        raise HTTPException(status_code=400, detail="No runners available")
+    r = _make_runner(config, pool, ollama_base)
+    runners[slot] = r
+    return r
+
+
 @app.post("/api/agents/{slot}/heartbeat")
 async def trigger_moltbook_heartbeat(slot: int):
-    if slot not in runners:
-        raise HTTPException(status_code=400, detail="Agent not running")
-    asyncio.create_task(runners[slot].run_heartbeat())
+    r = await _ensure_runner(slot)
+    if r._heartbeat_lock.locked():
+        return {"ok": True, "message": "Heartbeat already in progress"}
+    asyncio.create_task(r.run_heartbeat())
     return {"ok": True}
 
 
 @app.post("/api/agents/{slot}/compact-memory")
 async def compact_memory(slot: int):
-    if slot not in runners:
-        raise HTTPException(status_code=400, detail="Agent not running")
-    asyncio.create_task(runners[slot].compact_memory())
+    r = await _ensure_runner(slot)
+    asyncio.create_task(r.compact_memory())
     return {"ok": True, "message": "Memory compaction started in background"}
 
 
 @app.post("/api/agents/{slot}/interact-with-peers")
 async def interact_with_peers(slot: int):
-    if slot not in runners:
-        raise HTTPException(status_code=400, detail="Agent not running")
+    r = await _ensure_runner(slot)
     peer_names = [
         runners[s].config.persona.name
         for s in runners
@@ -498,7 +515,7 @@ async def interact_with_peers(slot: int):
     ]
     if not peer_names:
         return {"ok": True, "message": "No other running agents to interact with"}
-    asyncio.create_task(runners[slot].interact_with_peers(peer_names))
+    asyncio.create_task(r.interact_with_peers(peer_names))
     return {"ok": True, "message": f"Interacting with posts by: {', '.join(peer_names)}"}
 
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Play, Square, RefreshCw, ChevronDown, ChevronUp, Zap, Loader2, Users } from 'lucide-react'
-import { useStartAgent, useStopAgent, useTriggerHeartbeat, useInteractWithPeers, useAgentActivity } from '../hooks/useBackend'
+import { Square, RefreshCw, ChevronDown, ChevronUp, Zap, Loader2, Users } from 'lucide-react'
+import { useStopAgent, useTriggerHeartbeat, useInteractWithPeers, useAgentActivity } from '../hooks/useBackend'
 import type { Agent, ActivityEntry } from '../types'
 
 interface Props {
@@ -35,7 +35,6 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
 
 export function AgentCard({ agent }: Props) {
   const [expanded, setExpanded] = useState(false)
-  const start = useStartAgent()
   const stop = useStopAgent()
   const heartbeat = useTriggerHeartbeat()
   const interactPeers = useInteractWithPeers()
@@ -70,7 +69,17 @@ export function AgentCard({ agent }: Props) {
                 Unclaimed — click to fix
               </span>
             )}
-            {agent.has_recent_error && (
+            {agent.registered && agent.claimed && agent.running && agent.has_recent_error && (
+              <span className="text-xs bg-amber-900 text-amber-300 px-1.5 py-0.5 rounded">
+                Running with errors
+              </span>
+            )}
+            {agent.registered && agent.claimed && agent.running && !agent.has_recent_error && (
+              <span className="text-xs bg-green-900 text-green-300 px-1.5 py-0.5 rounded">
+                Running
+              </span>
+            )}
+            {agent.registered && agent.claimed && !agent.running && agent.has_recent_error && (
               <span className="text-xs bg-red-900 text-red-300 px-1.5 py-0.5 rounded">
                 Error
               </span>
@@ -85,24 +94,13 @@ export function AgentCard({ agent }: Props) {
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.preventDefault()}>
-          {!agent.running ? (
-            <button
-              onClick={() => start.mutate(agent.slot)}
-              disabled={!agent.registered || start.isPending}
-              title={!agent.registered ? 'Register first' : 'Start agent'}
-              className="p-1.5 rounded-lg bg-green-900/50 hover:bg-green-800/50 disabled:opacity-30 text-green-400 transition-colors"
-            >
-              {start.isPending
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : <Play className="w-4 h-4" />}
-            </button>
-          ) : (
+          {agent.enabled && (
             <>
               <button
                 onClick={() => heartbeat.mutate(agent.slot)}
                 disabled={heartbeat.isPending}
-                title="Trigger heartbeat now"
-                className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
+                title="Trigger heartbeat"
+                className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors disabled:opacity-30"
               >
                 {heartbeat.isPending
                   ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -111,8 +109,8 @@ export function AgentCard({ agent }: Props) {
               <button
                 onClick={() => interactPeers.mutate(agent.slot)}
                 disabled={interactPeers.isPending}
-                title="Interact with other running agents' posts"
-                className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
+                title="Interact with peers"
+                className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors disabled:opacity-30"
               >
                 {interactPeers.isPending
                   ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -121,8 +119,8 @@ export function AgentCard({ agent }: Props) {
               <button
                 onClick={() => stop.mutate(agent.slot)}
                 disabled={stop.isPending}
-                title="Stop agent"
-                className="p-1.5 rounded-lg bg-red-900/50 hover:bg-red-800/50 text-red-400 transition-colors"
+                title="Disable agent"
+                className="p-1.5 rounded-lg bg-red-900/50 hover:bg-red-800/50 text-red-400 transition-colors disabled:opacity-30"
               >
                 {stop.isPending
                   ? <Loader2 className="w-4 h-4 animate-spin" />

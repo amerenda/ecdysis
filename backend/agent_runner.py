@@ -41,6 +41,7 @@ class AgentRunner:
         self.state: AgentState = AgentState(slot=self.slot)
         self._task: asyncio.Task | None = None
         self.running = False
+        self._heartbeat_lock = asyncio.Lock()
         self._lock_conn = lock_conn
         self._psk = psk
 
@@ -202,6 +203,13 @@ class AgentRunner:
         # Interactions are recorded in place during operations — nothing extra to flush here
 
     async def run_heartbeat(self):
+        if self._heartbeat_lock.locked():
+            logger.info("[agent-%d] Heartbeat already in progress, skipping", self.slot)
+            return
+        async with self._heartbeat_lock:
+            await self._run_heartbeat_inner()
+
+    async def _run_heartbeat_inner(self):
         # Load fresh state from DB each heartbeat
         await self._load_state()
         hb_md = getattr(self.config, 'heartbeat_md', '') or ''
