@@ -296,6 +296,8 @@ async def get_moltbook_agents():
         result.append({
             "slot": row["slot"],
             "has_recent_error": recent_error is not None,
+            "heartbeat_active": row["slot"] in runners and runners[row["slot"]]._heartbeat_lock.locked(),
+            "heartbeat_queued": row["slot"] in runners and not runners[row["slot"]]._heartbeat_lock.locked() and _heartbeat_gate.locked(),
             "enabled": row["enabled"],
             "model": row["model"],
             "api_key": row["api_key"],

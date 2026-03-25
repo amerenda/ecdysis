@@ -69,12 +69,22 @@ export function AgentCard({ agent }: Props) {
                 Unclaimed — click to fix
               </span>
             )}
-            {agent.registered && agent.claimed && agent.running && agent.has_recent_error && (
+            {agent.heartbeat_active && (
+              <span className="text-xs bg-blue-900 text-blue-300 px-1.5 py-0.5 rounded animate-pulse">
+                Heartbeat
+              </span>
+            )}
+            {agent.heartbeat_queued && !agent.heartbeat_active && (
+              <span className="text-xs bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded">
+                Queued
+              </span>
+            )}
+            {agent.registered && agent.claimed && agent.running && agent.has_recent_error && !agent.heartbeat_active && (
               <span className="text-xs bg-amber-900 text-amber-300 px-1.5 py-0.5 rounded">
                 Running with errors
               </span>
             )}
-            {agent.registered && agent.claimed && agent.running && !agent.has_recent_error && (
+            {agent.registered && agent.claimed && agent.running && !agent.has_recent_error && !agent.heartbeat_active && !agent.heartbeat_queued && (
               <span className="text-xs bg-green-900 text-green-300 px-1.5 py-0.5 rounded">
                 Running
               </span>
