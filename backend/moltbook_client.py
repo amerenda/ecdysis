@@ -1,10 +1,14 @@
 """Moltbook API client. All endpoints from skill.md / heartbeat.md / messaging.md."""
 
+import asyncio
 import logging
 import httpx
 
 API_BASE = "https://www.moltbook.com/api/v1"
 logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 3
+RETRY_BACKOFF = [2, 5, 10]  # seconds
 
 
 class MoltbookClient:
@@ -15,23 +19,35 @@ class MoltbookClient:
             "Content-Type": "application/json",
         }
 
+    async def _request_with_retry(self, method: str, path: str, **kwargs) -> httpx.Response:
+        """Make an HTTP request with retry on 5xx errors."""
+        last_response = None
+        for attempt in range(MAX_RETRIES):
+            async with httpx.AsyncClient(timeout=30) as client:
+                r = await getattr(client, method)(f"{API_BASE}{path}", headers=self._headers, **kwargs)
+                if r.status_code < 500:
+                    return r
+                last_response = r
+                wait = RETRY_BACKOFF[attempt] if attempt < len(RETRY_BACKOFF) else RETRY_BACKOFF[-1]
+                logger.warning("Moltbook %d on %s %s — retry %d/%d in %ds", r.status_code, method.upper(), path, attempt + 1, MAX_RETRIES, wait)
+                await asyncio.sleep(wait)
+        return last_response
+
     async def _get(self, path: str, params: dict = None) -> dict:
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.get(f"{API_BASE}{path}", headers=self._headers, params=params)
-            if r.status_code >= 400:
-                body = r.text[:500]
-                logger.error("Moltbook API error %d on GET %s: %s", r.status_code, path, body)
-            r.raise_for_status()
-            return r.json()
+        r = await self._request_with_retry("get", path, params=params)
+        if r.status_code >= 400:
+            body = r.text[:500]
+            logger.error("Moltbook API error %d on GET %s: %s", r.status_code, path, body)
+        r.raise_for_status()
+        return r.json()
 
     async def _post(self, path: str, data: dict = None) -> dict:
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.post(f"{API_BASE}{path}", headers=self._headers, json=data or {})
-            if r.status_code >= 400:
-                body = r.text[:500]
-                logger.error("Moltbook API error %d on %s: %s", r.status_code, path, body)
-            r.raise_for_status()
-            return r.json()
+        r = await self._request_with_retry("post", path, json=data or {})
+        if r.status_code >= 400:
+            body = r.text[:500]
+            logger.error("Moltbook API error %d on POST %s: %s", r.status_code, path, body)
+        r.raise_for_status()
+        return r.json()
 
     # ── Core ────────────────────────────────────────────────────────────────
 
