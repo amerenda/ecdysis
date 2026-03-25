@@ -5,7 +5,7 @@ import {
   FileText, Upload, Key, Eye, EyeOff, Save, HelpCircle, ExternalLink, Filter,
 } from 'lucide-react'
 import {
-  useAgents, useAgentActivity, useModels,
+  useAgents, useAgentActivity, useAgentPosts, useModels,
   useStartAgent, useStopAgent,
   useTriggerHeartbeat, useInteractWithPeers,
   useUpdateAgent, useClaimStatus, useCompactMemory,
@@ -632,13 +632,14 @@ export function AgentDetail() {
   const slotNum = Number(slot)
   const agents = useAgents()
   const activity = useAgentActivity(slotNum, true)
+  const posts = useAgentPosts(slotNum, true)
   const models = useModels()
   const start = useStartAgent()
   const stop = useStopAgent()
   const heartbeat = useTriggerHeartbeat()
   const interactPeers = useInteractWithPeers()
 
-  const [tab, setTab] = useState<'activity' | 'config' | 'files'>('activity')
+  const [tab, setTab] = useState<'activity' | 'config' | 'files' | 'posts'>('activity')
   const [activityFilter, setActivityFilter] = useState<'all' | 'actions' | 'skipped'>('all')
   const [showClaim, setShowClaim] = useState(false)
   const [dismissedErrorTs, setDismissedErrorTs] = useState<string | null>(null)
@@ -862,6 +863,7 @@ export function AgentDetail() {
       <div className="flex gap-1 border-b border-gray-800">
         {([
           ['activity', 'Activity'],
+          ['posts', 'Posts'],
           ['config', 'Config'],
           ['files', 'Files'],
         ] as const).map(([id, label]) => (
@@ -936,6 +938,37 @@ export function AgentDetail() {
             </div>
           )
         })()}
+
+        {tab === 'posts' && (
+          <div className="space-y-1">
+            {posts.data && posts.data.length > 0 ? posts.data.map((e: ActivityEntry, i: number) => {
+              const ts = new Date(e.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+              // Extract post ID from detail like "New post: 'title' → m/submolt [post-id]"
+              const idMatch = e.detail.match(/\[([0-9a-f-]{36})\]/)
+              // Extract post ID from replied detail like "Replied to N comments on post-id"
+              const replyIdMatch = e.detail.match(/on ([0-9a-f-]{36})/)
+              const postId = idMatch?.[1] || replyIdMatch?.[1]
+              const url = postId ? `https://www.moltbook.com/m/post/${postId}` : null
+              const actionLabel = e.action === 'posted' || e.action === 'manual_post' ? 'Posted' : 'Replied'
+              const actionColor = e.action === 'posted' || e.action === 'manual_post' ? 'text-brand-400' : 'text-cyan-400'
+              return (
+                <div key={i} className="flex items-start gap-3 px-3 py-2 rounded-lg hover:bg-gray-800/30">
+                  <span className="text-[10px] text-gray-600 pt-0.5 whitespace-nowrap">{ts}</span>
+                  <span className={`text-xs font-medium ${actionColor} min-w-[50px]`}>{actionLabel}</span>
+                  <span className="text-xs text-gray-300 flex-1 break-all">{e.detail}</span>
+                  {url && (
+                    <a href={url} target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-brand-400 hover:text-brand-300 whitespace-nowrap flex-shrink-0">
+                      View
+                    </a>
+                  )}
+                </div>
+              )
+            }) : (
+              <p className="text-xs text-gray-600 py-4 text-center">No posts or comments yet</p>
+            )}
+          </div>
+        )}
 
         {tab === 'config' && models.data && (
           <ConfigEditor agent={agent} models={models.data} />

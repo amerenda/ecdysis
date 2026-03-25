@@ -568,7 +568,7 @@ class AgentRunner:
         title = lines[0].strip().lstrip("#").strip()[:300]
         body = "\n".join(lines[1:]).strip() or title
         try:
-            await self._post_with_challenge(
+            result = await self._post_with_challenge(
                 self.client.create_post, submolt=submolt, title=title, content=body
             )
             self.state.last_post_time = now
@@ -576,7 +576,8 @@ class AgentRunner:
             jitter = 1.0 + random.uniform(-beh.post_jitter_pct / 100, beh.post_jitter_pct / 100)
             self.state.next_post_time = now + interval_secs * jitter
             await self._save_state()
-            await self.log("posted", f"New post: '{title}' → m/{submolt}")
+            post_id = result.get("post", {}).get("id", "") if isinstance(result, dict) else ""
+            await self.log("posted", f"New post: '{title}' → m/{submolt} [{post_id}]")
         except httpx.HTTPStatusError as e:
             body = e.response.text[:300] if e.response else ""
             logger.error("Post error slot %d: %s — %s", self.slot, e, body)

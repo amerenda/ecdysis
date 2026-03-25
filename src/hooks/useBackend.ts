@@ -182,6 +182,15 @@ export function useCompactMemory() {
   })
 }
 
+export function useAgentPosts(slot: number, enabled: boolean) {
+  return useQuery<ActivityEntry[]>({
+    queryKey: ['agent-posts', slot],
+    queryFn: () => get(`/api/agents/${slot}/posts`),
+    enabled,
+    refetchInterval: 60_000,
+  })
+}
+
 // ── System Logs ─────────────────────────────────────────────────────────────
 
 export interface SystemLog {
@@ -194,14 +203,15 @@ export interface SystemLog {
   created_at: string
 }
 
-export function useSystemLogs(source?: string, level?: string) {
+export function useSystemLogs(source?: string, level?: string, slot?: number) {
   const params = new URLSearchParams()
   if (source) params.set('source', source)
   if (level) params.set('level', level)
+  if (slot !== undefined) params.set('slot', String(slot))
   params.set('limit', '200')
   const query = params.toString()
   return useQuery<SystemLog[]>({
-    queryKey: ['system-logs', source, level],
+    queryKey: ['system-logs', source, level, slot],
     queryFn: () => get(`/api/logs?${query}`),
     refetchInterval: 5_000,
   })

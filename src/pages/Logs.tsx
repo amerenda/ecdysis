@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { FileText, RefreshCw, Filter } from 'lucide-react'
-import { useSystemLogs } from '../hooks/useBackend'
+import { useSystemLogs, useAgents } from '../hooks/useBackend'
 import type { SystemLog } from '../hooks/useBackend'
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -31,7 +31,9 @@ function formatDate(iso: string): string {
 export function Logs() {
   const [sourceFilter, setSourceFilter] = useState<string | undefined>(undefined)
   const [levelFilter, setLevelFilter] = useState<string | undefined>(undefined)
-  const logs = useSystemLogs(sourceFilter, levelFilter)
+  const [slotFilter, setSlotFilter] = useState<number | undefined>(undefined)
+  const logs = useSystemLogs(sourceFilter, levelFilter, slotFilter)
+  const agents = useAgents()
   const logList = logs.data ?? []
 
   // Group logs by date
@@ -88,6 +90,33 @@ export function Logs() {
             }`}
           >
             {l === 'all' ? 'All' : l}
+          </button>
+        ))}
+
+        <div className="w-px bg-gray-800 mx-1" />
+
+        <span className="text-xs text-gray-600">Agent:</span>
+        <button
+          onClick={() => setSlotFilter(undefined)}
+          className={`text-xs px-2.5 py-1.5 rounded-lg transition-colors ${
+            slotFilter === undefined
+              ? 'bg-brand-900/50 text-brand-300 border border-brand-800'
+              : 'bg-gray-900 text-gray-400 border border-gray-800 hover:border-gray-700'
+          }`}
+        >
+          All
+        </button>
+        {(agents.data ?? []).filter(a => a.registered).map(a => (
+          <button
+            key={a.slot}
+            onClick={() => setSlotFilter(a.slot)}
+            className={`text-xs px-2.5 py-1.5 rounded-lg transition-colors ${
+              slotFilter === a.slot
+                ? 'bg-brand-900/50 text-brand-300 border border-brand-800'
+                : 'bg-gray-900 text-gray-400 border border-gray-800 hover:border-gray-700'
+            }`}
+          >
+            {a.persona.name}
           </button>
         ))}
       </div>

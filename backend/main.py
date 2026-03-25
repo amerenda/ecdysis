@@ -249,9 +249,9 @@ async def health():
 # ── System logs ──────────────────────────────────────────────────────────────
 
 @app.get("/api/logs")
-async def get_system_logs(source: Optional[str] = None, level: Optional[str] = None, limit: int = 200):
-    """Get system logs from all pods. Filter by source (backend/frontend) and level."""
-    logs = await db.get_logs(app.state.db, source=source, level=level, limit=min(limit, 500))
+async def get_system_logs(source: Optional[str] = None, level: Optional[str] = None, slot: Optional[int] = None, limit: int = 200):
+    """Get system logs from all pods. Filter by source, level, and agent slot."""
+    logs = await db.get_logs(app.state.db, source=source, level=level, slot=slot, limit=min(limit, 500))
     return logs
 
 
@@ -496,6 +496,14 @@ async def trigger_moltbook_heartbeat(slot: int):
         return {"ok": True, "message": "Heartbeat already in progress"}
     asyncio.create_task(r.run_heartbeat())
     return {"ok": True}
+
+
+@app.get("/api/agents/{slot}/posts")
+async def get_agent_posts(slot: int, n: int = 50):
+    """Return recent posts and comments by this agent with Moltbook links."""
+    activity = await db.read_moltbook_activity(app.state.db, slot, n=200)
+    post_actions = {'posted', 'manual_post', 'replied', 'thread_reply'}
+    return [e for e in activity if e['action'] in post_actions][:n]
 
 
 @app.post("/api/agents/{slot}/compact-memory")

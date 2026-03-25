@@ -436,29 +436,30 @@ async def read_moltbook_activity(
 
 
 async def get_recent_error(pool: asyncpg.Pool, slot: int) -> dict | None:
-    """Return the most recent error within the last 4 heartbeats, or None."""
+    """Return an error if one occurred after the most recent completed heartbeat."""
     async with pool.acquire() as conn:
-        # Find the 4th-most-recent "Done" heartbeat as the cutoff
-        cutoff_row = await conn.fetchrow(
+        last_done = await conn.fetchrow(
             """
             SELECT created_at FROM moltbook_activity
             WHERE slot = $1 AND action = 'heartbeat' AND detail LIKE 'Done%%'
-            ORDER BY created_at DESC OFFSET 3 LIMIT 1
+            ORDER BY created_at DESC LIMIT 1
             """,
             slot,
         )
-        cutoff = cutoff_row["created_at"] if cutoff_row else None
-        # Find most recent error after that cutoff
-        query = """
-            SELECT action, detail, created_at FROM moltbook_activity
-            WHERE slot = $1 AND action = 'error'
-        """
-        params: list = [slot]
-        if cutoff:
-            query += " AND created_at >= $2"
-            params.append(cutoff)
-        query += " ORDER BY created_at DESC LIMIT 1"
-        row = await conn.fetchrow(query, *params)
+        if last_done:
+            row = await conn.fetchrow(
+                """
+                SELECT action, detail, created_at FROM moltbook_activity
+                WHERE slot = $1 AND action = 'error' AND created_at >= $2
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                slot, last_done["created_at"],
+            )
+        else:
+            row = await conn.fetchrow(
+                "SELECT action, detail, created_at FROM moltbook_activity WHERE slot = $1 AND action = 'error' ORDER BY created_at DESC LIMIT 1",
+                slot,
+            )
         return dict(row) if row else None
 
 
@@ -623,6 +624,7 @@ async def get_logs(
     pool: asyncpg.Pool,
     source: Optional[str] = None,
     level: Optional[str] = None,
+    slot: Optional[int] = None,
     limit: int = 200,
 ) -> list[dict]:
     conditions = []
@@ -635,6 +637,10 @@ async def get_logs(
     if level:
         conditions.append(f"level = ${idx}")
         params.append(level)
+        idx += 1
+    if slot is not None:
+        conditions.append(f"message LIKE ${idx}")
+        params.append(f"%[agent-{slot}]%")
         idx += 1
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     params.append(limit)
