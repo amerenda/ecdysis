@@ -485,6 +485,33 @@ async def get_agent_activity(slot: int, n: int = 50):
     return await db.read_moltbook_activity(app.state.db, slot, n)
 
 
+@app.get("/api/agents/{slot}/check-submolts")
+async def check_submolts(slot: int):
+    """Validate configured target_submolts against Moltbook API."""
+    pool = app.state.db
+    row = await db.get_moltbook_config(pool, slot)
+    if not row:
+        raise HTTPException(status_code=404)
+    submolts = row.get("target_submolts", [])
+    api_key = row.get("api_key", "")
+    if not submolts:
+        return {"valid": [], "invalid": [], "missing": True}
+    if not api_key:
+        return {"valid": [], "invalid": [], "missing": False, "unchecked": True}
+    client = MoltbookClient(api_key)
+    valid = []
+    invalid = []
+    for name in submolts:
+        try:
+            if await client.check_submolt(name):
+                valid.append(name)
+            else:
+                invalid.append(name)
+        except Exception:
+            valid.append(name)  # assume valid on error to avoid false positives
+    return {"valid": valid, "invalid": invalid, "missing": False}
+
+
 class PostRequest(BaseModel):
     submolt: str
     title: str

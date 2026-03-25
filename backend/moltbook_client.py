@@ -39,6 +39,16 @@ class MoltbookClient:
     async def feed(self, sort: str = "new", limit: int = 15) -> dict:
         return await self._get("/feed", {"sort": sort, "limit": limit})
 
+    async def check_submolt(self, name: str) -> bool:
+        """Check if a submolt exists on Moltbook. Returns True if valid."""
+        try:
+            await self._get(f"/submolts/{name}")
+            return True
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return False
+            raise
+
     # ── Posts ───────────────────────────────────────────────────────────────
 
     async def create_post(

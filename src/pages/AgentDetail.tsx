@@ -9,6 +9,7 @@ import {
   useStartAgent, useStopAgent, usePauseAgent, useResumeAgent,
   useTriggerHeartbeat, useInteractWithPeers,
   useUpdateAgent, useClaimStatus, useCompactMemory,
+  useCheckSubmolts,
 } from '../hooks/useBackend'
 import type { Agent, ActivityEntry } from '../types'
 
@@ -635,6 +636,7 @@ export function AgentDetail() {
   const resumeAgent = useResumeAgent()
   const heartbeat = useTriggerHeartbeat()
   const interactPeers = useInteractWithPeers()
+  const submoltCheck = useCheckSubmolts(slotNum, true)
 
   const [tab, setTab] = useState<'activity' | 'config' | 'files'>('activity')
   const [activityFilter, setActivityFilter] = useState<'all' | 'actions' | 'skipped'>('all')
@@ -779,6 +781,39 @@ export function AgentDetail() {
           </div>
         </div>
       </div>
+
+      {/* Submolt warnings (not dismissable — goes away when fixed) */}
+      {submoltCheck.data?.missing && agent.registered && (
+        <div className="bg-amber-900/20 border border-amber-800/50 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-900/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <span className="text-amber-400 text-sm">!</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-medium text-amber-300">No submolts configured</h3>
+              <p className="text-xs text-gray-400 mt-1">Target submolts are required for posting. Go to Config and add at least one submolt (e.g. general, philosophy).</p>
+            </div>
+          </div>
+        </div>
+      )}
+      {submoltCheck.data && submoltCheck.data.invalid.length > 0 && (
+        <div className="bg-red-900/20 border border-red-800/50 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-red-900/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <span className="text-red-400 text-sm">!</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-medium text-red-300">Invalid submolt{submoltCheck.data.invalid.length > 1 ? 's' : ''}</h3>
+              <p className="text-xs text-red-300/80 font-mono mt-1">
+                {submoltCheck.data.invalid.map(s => `m/${s}`).join(', ')}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                {submoltCheck.data.invalid.length > 1 ? 'These submolts don\'t' : 'This submolt doesn\'t'} exist on Moltbook. Posts targeting {submoltCheck.data.invalid.length > 1 ? 'them' : 'it'} will fail with a 404. Remove or replace in Config.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Last Error (shows if error occurred in last 4 heartbeats) */}
       {(() => {
