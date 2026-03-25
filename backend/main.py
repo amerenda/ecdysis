@@ -141,7 +141,9 @@ async def _try_acquire_agent_lock(conn: asyncpg.Connection, slot: int) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _lock_conn
-    pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
+    pool_min = int(os.environ.get("DB_POOL_MIN", "2"))
+    pool_max = int(os.environ.get("DB_POOL_MAX", "10"))
+    pool = await asyncpg.create_pool(DATABASE_URL, min_size=pool_min, max_size=pool_max)
     app.state.db = pool
     await db.init_db(pool)
     logger.info("Database connected: %s", DATABASE_URL)

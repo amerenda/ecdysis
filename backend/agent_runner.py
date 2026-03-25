@@ -492,26 +492,34 @@ class AgentRunner:
 
         logger.info("[agent-%d] Attempting to post...", self.slot)
 
-        # Choose submolt — prefer target list, fall back to discovery
-        if beh.target_submolts:
+        # Choose submolt — use preferred list ~70% of the time, discover otherwise
+        submolt = None
+        if beh.target_submolts and random.random() < 0.7:
             submolt = random.choice(beh.target_submolts)
-        else:
+        if not submolt:
             try:
                 all_submolts = await self.client.list_submolts()
                 names = [s["name"] for s in all_submolts]
-                excludes = set(beh.exclude_submolts)
+                excludes = set(beh.exclude_submolts) | set(beh.target_submolts)
                 candidates = [n for n in names if n not in excludes]
-                if not candidates:
+                if not candidates and not beh.target_submolts:
                     await self.log("skipped_post", "No submolts available after applying excludes")
                     return
-                # Prefer submolts matching agent topics
-                topics_lower = {t.lower() for t in self.config.persona.topics}
-                matched = [n for n in candidates if n.lower() in topics_lower]
-                submolt = random.choice(matched) if matched else random.choice(candidates)
+                if candidates:
+                    # Prefer submolts matching agent topics
+                    topics_lower = {t.lower() for t in self.config.persona.topics}
+                    matched = [n for n in candidates if n.lower() in topics_lower]
+                    submolt = random.choice(matched) if matched else random.choice(candidates)
+                else:
+                    # All submolts excluded, fall back to target list
+                    submolt = random.choice(beh.target_submolts)
             except Exception as e:
-                logger.error("Failed to discover submolts for slot %d: %s", self.slot, e)
-                await self.log("skipped_post", f"Could not discover submolts: {e}")
-                return
+                if beh.target_submolts:
+                    submolt = random.choice(beh.target_submolts)
+                else:
+                    logger.error("Failed to discover submolts for slot %d: %s", self.slot, e)
+                    await self.log("skipped_post", f"Could not discover submolts: {e}")
+                    return
 
         topics = self.config.persona.topics
         max_len = beh.max_post_length
