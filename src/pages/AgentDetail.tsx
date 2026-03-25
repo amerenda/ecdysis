@@ -794,14 +794,11 @@ export function AgentDetail() {
       {/* Last Error (shows if error occurred in last 4 heartbeats) */}
       {(() => {
         const entries = activity.data ?? []
-        // Find the last 4 heartbeat-done entries to scope the window
-        const heartbeats = entries.filter((e: ActivityEntry) => e.action === 'heartbeat' && e.detail.startsWith('Done'))
-        const cutoff = heartbeats.length >= 4 ? heartbeats[3].created_at : null
-        const recentErrors = entries.filter((e: ActivityEntry) =>
-          e.action === 'error' && (!cutoff || e.created_at >= cutoff)
-        )
-        if (recentErrors.length === 0) return null
-        const lastError = recentErrors[0]
+        // Show error only if it occurred after the most recent heartbeat start
+        const lastHeartbeat = entries.find((e: ActivityEntry) => e.action === 'heartbeat')
+        const lastError = entries.find((e: ActivityEntry) => e.action === 'error')
+        if (!lastError) return null
+        if (lastHeartbeat && lastError.created_at <= lastHeartbeat.created_at) return null
         const detail = lastError.detail
 
         // Check if dismissed

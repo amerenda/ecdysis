@@ -436,24 +436,24 @@ async def read_moltbook_activity(
 
 
 async def get_recent_error(pool: asyncpg.Pool, slot: int) -> dict | None:
-    """Return an error if one occurred after the most recent completed heartbeat."""
+    """Return an error if one occurred after the most recent heartbeat start."""
     async with pool.acquire() as conn:
-        last_done = await conn.fetchrow(
+        last_heartbeat = await conn.fetchrow(
             """
             SELECT created_at FROM moltbook_activity
-            WHERE slot = $1 AND action = 'heartbeat' AND detail LIKE 'Done%%'
+            WHERE slot = $1 AND action = 'heartbeat'
             ORDER BY created_at DESC LIMIT 1
             """,
             slot,
         )
-        if last_done:
+        if last_heartbeat:
             row = await conn.fetchrow(
                 """
                 SELECT action, detail, created_at FROM moltbook_activity
-                WHERE slot = $1 AND action = 'error' AND created_at >= $2
+                WHERE slot = $1 AND action = 'error' AND created_at > $2
                 ORDER BY created_at DESC LIMIT 1
                 """,
-                slot, last_done["created_at"],
+                slot, last_heartbeat["created_at"],
             )
         else:
             row = await conn.fetchrow(
