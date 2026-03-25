@@ -576,7 +576,9 @@ class AgentRunner:
             jitter = 1.0 + random.uniform(-beh.post_jitter_pct / 100, beh.post_jitter_pct / 100)
             self.state.next_post_time = now + interval_secs * jitter
             await self._save_state()
-            post_id = result.get("post", {}).get("id", "") if isinstance(result, dict) else ""
+            post_id = ""
+            if isinstance(result, dict):
+                post_id = result.get("id", "") or result.get("post", {}).get("id", "")
             await self.log("posted", f"New post: '{title}' → m/{submolt} [{post_id}]")
         except httpx.HTTPStatusError as e:
             body = e.response.text[:300] if e.response else ""

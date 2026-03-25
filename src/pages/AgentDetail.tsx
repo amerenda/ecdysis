@@ -943,24 +943,26 @@ export function AgentDetail() {
           <div className="space-y-1">
             {posts.data && posts.data.length > 0 ? posts.data.map((e: ActivityEntry, i: number) => {
               const ts = new Date(e.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-              // Extract post ID from detail like "New post: 'title' → m/submolt [post-id]"
+              // Extract UUID from brackets [post-id] or after "on post-id"
               const idMatch = e.detail.match(/\[([0-9a-f-]{36})\]/)
-              // Extract post ID from replied detail like "Replied to N comments on post-id"
               const replyIdMatch = e.detail.match(/on ([0-9a-f-]{36})/)
               const postId = idMatch?.[1] || replyIdMatch?.[1]
-              const url = postId ? `https://www.moltbook.com/m/post/${postId}` : null
-              const actionLabel = e.action === 'posted' || e.action === 'manual_post' ? 'Posted' : 'Replied'
-              const actionColor = e.action === 'posted' || e.action === 'manual_post' ? 'text-brand-400' : 'text-cyan-400'
+              const url = postId ? `https://www.moltbook.com/post/${postId}` : null
+              const isPost = e.action === 'posted' || e.action === 'manual_post'
               return (
                 <div key={i} className="flex items-start gap-3 px-3 py-2 rounded-lg hover:bg-gray-800/30">
                   <span className="text-[10px] text-gray-600 pt-0.5 whitespace-nowrap">{ts}</span>
-                  <span className={`text-xs font-medium ${actionColor} min-w-[50px]`}>{actionLabel}</span>
+                  <span className={`text-xs font-medium ${isPost ? 'text-brand-400' : 'text-cyan-400'} min-w-[50px]`}>
+                    {isPost ? 'Posted' : 'Replied'}
+                  </span>
                   <span className="text-xs text-gray-300 flex-1 break-all">{e.detail}</span>
-                  {url && (
+                  {url ? (
                     <a href={url} target="_blank" rel="noopener noreferrer"
                       className="text-xs text-brand-400 hover:text-brand-300 whitespace-nowrap flex-shrink-0">
                       View
                     </a>
+                  ) : (
+                    <span className="text-[10px] text-gray-700 whitespace-nowrap flex-shrink-0">no link</span>
                   )}
                 </div>
               )
