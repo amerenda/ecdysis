@@ -74,7 +74,7 @@ class AgentRunner:
             base += f"\n\n--- Memory ---\n{memory}"
         sys_prompt = system or base
         try:
-            async with httpx.AsyncClient(timeout=60) as http:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=120)) as http:
                 r = await http.post(
                     f"{self.ollama_base}/api/chat",
                     json={
@@ -87,9 +87,17 @@ class AgentRunner:
                     },
                 )
                 r.raise_for_status()
-                return r.json()["message"]["content"].strip()
+                content = r.json()["message"]["content"].strip()
+                # Strip deepseek-r1 thinking tags if present
+                if "<think>" in content:
+                    import re
+                    content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+                return content
+        except httpx.ReadTimeout:
+            logger.warning("LLM timeout slot %d (model=%s, prompt=%d chars)", self.slot, self.ollama_model, len(prompt))
+            return ""
         except Exception as e:
-            logger.error("LLM error slot %d: %s", self.slot, e)
+            logger.error("LLM error slot %d: %s (%s)", self.slot, type(e).__name__, e)
             return ""
 
     async def _solve_challenge(self, problem: str) -> str:
