@@ -66,7 +66,6 @@ export interface Agent {
   claimed: boolean
   has_recent_error: boolean
   running: boolean
-  paused: boolean
   soul_md: string
   heartbeat_md: string
   messaging_md: string

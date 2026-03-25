@@ -161,21 +161,6 @@ export function useSetupOwnerEmail() {
   })
 }
 
-export function usePauseAgent() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (slot: number) => post(`/api/agents/${slot}/pause`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['agents'] }),
-  })
-}
-
-export function useResumeAgent() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (slot: number) => post(`/api/agents/${slot}/resume`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['agents'] }),
-  })
-}
 
 export function useTriggerHeartbeat() {
   return useMutation({
