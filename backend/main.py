@@ -498,9 +498,14 @@ async def stop_moltbook_agent(slot: int):
 
 
 async def _ensure_runner(slot: int) -> AgentRunner:
-    """Get or create a runner for one-off actions on enabled agents."""
+    """Get or create a runner for one-off actions on enabled agents.
+    Only creates a runner if this pod holds (or can acquire) the advisory lock."""
     if slot in runners:
         return runners[slot]
+    # Check advisory lock — don't create a runner if another pod owns this slot
+    if _lock_conn:
+        if not await _try_acquire_agent_lock(_lock_conn, slot):
+            raise HTTPException(status_code=409, detail=f"Agent {slot} is running on another replica")
     pool = app.state.db
     row = await db.get_moltbook_config(pool, slot)
     if not row or not row.get("api_key"):
