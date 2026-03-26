@@ -69,6 +69,25 @@ jobs:
           git clone https://x-access-token:${GITOPS_PAT}@github.com/${GITOPS_REPO}.git /tmp/gitops
           cd /tmp/gitops
 
+          # Close any existing ecdysis deploy PRs to avoid ApplicationSet conflicts
+          EXISTING_PRS=$(curl -s \
+            -H "Authorization: token ${GITOPS_PAT}" \
+            "https://api.github.com/repos/${GITOPS_REPO}/pulls?state=open&per_page=100" \
+            | python3 -c "
+          import json,sys
+          for pr in json.load(sys.stdin):
+              ref = pr.get('head',{}).get('ref','')
+              if ref.startswith('deploy/ecdysis-') or ref.startswith('release/ecdysis-'):
+                  print(pr['number'])
+          " 2>/dev/null || true)
+          for PR_NUM in $EXISTING_PRS; do
+            echo "Closing superseded PR #${PR_NUM}"
+            curl -s -X PATCH \
+              -H "Authorization: token ${GITOPS_PAT}" \
+              "https://api.github.com/repos/${GITOPS_REPO}/pulls/${PR_NUM}" \
+              -d '{"state":"closed"}' > /dev/null
+          done
+
           BRANCH="${PREFIX}/ecdysis-${TAG}"
           git checkout -b "${BRANCH}"
 
