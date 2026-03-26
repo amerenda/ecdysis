@@ -336,15 +336,22 @@ class AgentRunner:
             return
         try:
             data = await self.client.get_comments(post_id, sort="new", limit=35)
-            replied = 0
             own_name = self.config.persona.name
             comments = data.get("comments", [])
 
-            # Find the agent's most recent comment timestamp on this post
-            # Skip any comments older than that to avoid re-replying
+            # Count how many comments the agent already has on this post
             own_comments = [c for c in comments if c.get("author", {}).get("name") == own_name]
+            if len(own_comments) >= 3:
+                # Already replied enough to this post — just mark read
+                await self.client.mark_notifications_read(post_id)
+                if self.config.behavior.log_skipped:
+                    await self.log("skipped_reply", f"Already have {len(own_comments)} comments on {post_id}, skipping")
+                return
+
+            # Find the agent's most recent comment timestamp on this post
             last_own_ts = max((c.get("created_at", "") for c in own_comments), default="")
 
+            replied = 0
             for comment in comments[:5]:
                 author = comment.get("author", {}).get("name", "someone")
                 if author == own_name:
@@ -356,6 +363,9 @@ class AgentRunner:
                 content = comment.get("content", "")
                 if not content:
                     continue
+                # Only reply to 1 new comment per heartbeat per post
+                if replied >= 1:
+                    break
                 reply = await self._llm(
                     f'{author} replied to your post:\n"{content}"\n\n'
                     "Write a thoughtful reply (1-3 sentences). No filler.",
@@ -371,7 +381,7 @@ class AgentRunner:
                     await self.log("skipped_reply", f"LLM returned empty reply to {author} on {post_id}")
             await self.client.mark_notifications_read(post_id)
             if replied:
-                await self.log("replied", f"Replied to {replied} comments on {post_id}")
+                await self.log("replied", f"Replied to {replied} comment on {post_id}")
         except Exception as e:
             logger.error("Post activity error: %s", e)
 
@@ -451,21 +461,29 @@ class AgentRunner:
             logger.error("Browse error: %s", e)
 
     async def _reply_to_own_threads(self):
-        """Continue agent's own recent posts as threads."""
+        """Continue agent's own recent posts as threads (max 1 per heartbeat)."""
         try:
             feed = await self.client.feed(sort="new", limit=30)
             own_name = self.config.persona.name
             own_posts = [
                 p for p in feed.get("posts", [])
                 if p.get("author", {}).get("name") == own_name
-            ][:3]  # at most 3 recent posts to consider
+            ][:3]
 
             for post in own_posts:
                 pid = post.get("id")
                 if not pid:
                     continue
-                # Only thread ~30% of the time per post to avoid spam
-                if random.random() > 0.3:
+                # Check how many comments we already have on this post
+                try:
+                    data = await self.client.get_comments(pid, sort="new", limit=20)
+                    own_count = sum(1 for c in data.get("comments", []) if c.get("author", {}).get("name") == own_name)
+                    if own_count >= 2:
+                        continue  # enough thread continuation on this post
+                except Exception:
+                    continue
+                # Only thread ~20% of the time to avoid spam
+                if random.random() > 0.2:
                     continue
                 continuation = await self._llm(
                     f'You previously posted:\nTitle: "{post.get("title")}"\n'
@@ -480,6 +498,7 @@ class AgentRunner:
                         )
                         await self.log("thread_reply", f"Continued thread on '{post.get('title')}'")
                         await asyncio.sleep(20)
+                        return  # only one thread continuation per heartbeat
                     except Exception as e:
                         logger.error("Thread reply error: %s", e)
                 elif self.config.behavior.log_skipped:
