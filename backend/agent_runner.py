@@ -240,8 +240,11 @@ class AgentRunner:
             await self._save_state()
 
             if self.config.behavior.auto_reply:
+                reply_budget = [self.config.behavior.max_replies_per_heartbeat]
                 for activity in home.get("activity_on_your_posts", []):
-                    await self._handle_post_activity(activity)
+                    if reply_budget[0] <= 0:
+                        break
+                    await self._handle_post_activity(activity, reply_budget)
 
             dm_data = await self.client.dm_check()
             if dm_data.get("has_activity"):
@@ -330,10 +333,12 @@ class AgentRunner:
         await self.log("memory", f"Compacted memory: {len(current)} → {len(result)} chars")
         return result
 
-    async def _handle_post_activity(self, activity: dict):
+    async def _handle_post_activity(self, activity: dict, heartbeat_reply_budget: list[int]):
+        """Handle replies to a post. heartbeat_reply_budget is a mutable [remaining] counter."""
         post_id = activity.get("post_id") or activity.get("id")
-        if not post_id:
+        if not post_id or heartbeat_reply_budget[0] <= 0:
             return
+        max_per_post = self.config.behavior.max_comments_per_post
         try:
             data = await self.client.get_comments(post_id, sort="new", limit=35)
             own_name = self.config.persona.name
@@ -341,41 +346,61 @@ class AgentRunner:
 
             # Count how many comments the agent already has on this post
             own_comments = [c for c in comments if c.get("author", {}).get("name") == own_name]
-            if len(own_comments) >= 3:
-                # Already replied enough to this post — just mark read
+            if len(own_comments) >= max_per_post:
                 await self.client.mark_notifications_read(post_id)
                 if self.config.behavior.log_skipped:
-                    await self.log("skipped_reply", f"Already have {len(own_comments)} comments on {post_id}, skipping")
+                    await self.log("skipped_reply", f"Already have {len(own_comments)}/{max_per_post} comments on {post_id}")
                 return
 
             # Find the agent's most recent comment timestamp on this post
             last_own_ts = max((c.get("created_at", "") for c in own_comments), default="")
 
-            replied = 0
-            for comment in comments[:5]:
+            # Collect new comments worth considering
+            candidates = []
+            for comment in comments[:10]:
                 author = comment.get("author", {}).get("name", "someone")
                 if author == own_name:
                     continue
-                # Skip comments we've likely already replied to
                 comment_ts = comment.get("created_at", "")
                 if last_own_ts and comment_ts <= last_own_ts:
                     continue
                 content = comment.get("content", "")
-                if not content:
-                    continue
-                # Only reply to 1 new comment per heartbeat per post
-                if replied >= 1:
-                    break
+                if content:
+                    candidates.append((author, content, comment.get("id")))
+
+            if not candidates:
+                await self.client.mark_notifications_read(post_id)
+                return
+
+            # Let the LLM pick which comment is most worth replying to
+            if len(candidates) > 1:
+                options = "\n".join(f"{i+1}. {a}: \"{c[:100]}\"" for i, (a, c, _) in enumerate(candidates))
+                pick = await self._llm(
+                    f"These people replied to your post. Pick the ONE most interesting "
+                    f"to reply to. Just respond with the number.\n\n{options}"
+                )
+                try:
+                    idx = int(pick.strip().rstrip(".")) - 1
+                    if 0 <= idx < len(candidates):
+                        candidates = [candidates[idx]]
+                    else:
+                        candidates = [candidates[0]]
+                except (ValueError, IndexError):
+                    candidates = [candidates[0]]
+
+            replied = 0
+            for author, content, comment_id in candidates[:1]:
                 reply = await self._llm(
                     f'{author} replied to your post:\n"{content}"\n\n'
                     "Write a thoughtful reply (1-3 sentences). No filler.",
-                    )
+                )
                 if reply:
                     await self._post_with_challenge(
                         self.client.create_comment, post_id, reply,
-                        parent_id=comment.get("id"),
+                        parent_id=comment_id,
                     )
                     replied += 1
+                    heartbeat_reply_budget[0] -= 1
                     await asyncio.sleep(25)
                 elif self.config.behavior.log_skipped:
                     await self.log("skipped_reply", f"LLM returned empty reply to {author} on {post_id}")

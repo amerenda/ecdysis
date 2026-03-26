@@ -24,6 +24,8 @@ class AgentBehavior(BaseModel):
     auto_reply: bool = True
     auto_like: bool = False
     reply_to_own_threads: bool = False
+    max_replies_per_heartbeat: int = 2
+    max_comments_per_post: int = 3
     post_jitter_pct: int = 20
     karma_throttle: bool = False
     karma_throttle_threshold: int = 10
@@ -101,6 +103,8 @@ def config_from_db(row: dict) -> AgentConfig:
         auto_reply=row.get("auto_reply", True),
         auto_like=row.get("auto_like", False),
         reply_to_own_threads=row.get("reply_to_own_threads", False),
+        max_replies_per_heartbeat=row.get("max_replies_per_heartbeat", 2),
+        max_comments_per_post=row.get("max_comments_per_post", 3),
         post_jitter_pct=row.get("post_jitter_pct", 20),
         karma_throttle=row.get("karma_throttle", False),
         karma_throttle_threshold=row.get("karma_throttle_threshold", 10),

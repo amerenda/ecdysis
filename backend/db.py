@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS moltbook_configs (
     auto_reply BOOLEAN NOT NULL DEFAULT TRUE,
     auto_like BOOLEAN NOT NULL DEFAULT FALSE,
     reply_to_own_threads BOOLEAN NOT NULL DEFAULT FALSE,
+    max_replies_per_heartbeat INT NOT NULL DEFAULT 2,
+    max_comments_per_post INT NOT NULL DEFAULT 3,
     post_jitter_pct INT NOT NULL DEFAULT 20,
     karma_throttle BOOLEAN NOT NULL DEFAULT FALSE,
     karma_throttle_threshold INT NOT NULL DEFAULT 10,
@@ -189,6 +191,16 @@ async def init_db(pool: asyncpg.Pool) -> None:
         except asyncpg.DuplicateColumnError:
             pass
 
+        # Migration: add reply limit columns
+        for col, default in [("max_replies_per_heartbeat", 2), ("max_comments_per_post", 3)]:
+            try:
+                await conn.execute(
+                    f"ALTER TABLE moltbook_configs ADD COLUMN {col} INT NOT NULL DEFAULT {default}"
+                )
+                logger.info("Added column moltbook_configs.%s", col)
+            except asyncpg.DuplicateColumnError:
+                pass
+
 
 # ── moltbook_configs ─────────────────────────────────────────────────────────
 
@@ -215,6 +227,8 @@ def _default_config_dict(slot: int) -> dict:
         "auto_reply": True,
         "auto_like": False,
         "reply_to_own_threads": False,
+        "max_replies_per_heartbeat": 2,
+        "max_comments_per_post": 3,
         "post_jitter_pct": 20,
         "karma_throttle": False,
         "karma_throttle_threshold": 10,

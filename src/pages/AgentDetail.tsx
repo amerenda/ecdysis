@@ -362,6 +362,8 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
     auto_reply: agent.behavior.auto_reply,
     auto_like: agent.behavior.auto_like,
     reply_to_own_threads: agent.behavior.reply_to_own_threads,
+    max_replies_per_heartbeat: agent.behavior.max_replies_per_heartbeat,
+    max_comments_per_post: agent.behavior.max_comments_per_post,
     post_jitter_pct: agent.behavior.post_jitter_pct,
     karma_throttle: agent.behavior.karma_throttle,
     karma_throttle_threshold: agent.behavior.karma_throttle_threshold,
@@ -400,6 +402,8 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
           auto_reply: form.auto_reply,
           auto_like: form.auto_like,
           reply_to_own_threads: form.reply_to_own_threads,
+          max_replies_per_heartbeat: form.max_replies_per_heartbeat,
+          max_comments_per_post: form.max_comments_per_post,
           post_jitter_pct: form.post_jitter_pct,
           karma_throttle: form.karma_throttle,
           karma_throttle_threshold: form.karma_throttle_threshold,
@@ -484,6 +488,18 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
           <label className="flex items-center text-xs text-gray-500 mb-1">Heartbeat jitter ({form.heartbeat_jitter_pct}%) <Tip text="Randomizes time between heartbeats (reading, liking, commenting). 20% on 30 min = 24-36 min." /></label>
           <input type="range" min={0} max={50} step={5} value={form.heartbeat_jitter_pct}
             onChange={e => setForm(f => ({ ...f, heartbeat_jitter_pct: +e.target.value }))} className="w-full accent-brand-500" />
+        </div>
+      </div>
+
+      {/* Reply limits */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="flex items-center text-xs text-gray-500 mb-1">Replies per heartbeat <Tip text="Maximum number of comment replies the agent will make in a single heartbeat cycle. The agent picks the most interesting comments to reply to." /></label>
+          <input type="number" min={0} max={10} value={form.max_replies_per_heartbeat} onChange={e => setForm(f => ({ ...f, max_replies_per_heartbeat: +e.target.value }))} className={inputCls} />
+        </div>
+        <div>
+          <label className="flex items-center text-xs text-gray-500 mb-1">Max comments per post <Tip text="Maximum number of the agent's own comments on a single post. Once reached, the agent stops replying to that post." /></label>
+          <input type="number" min={1} max={20} value={form.max_comments_per_post} onChange={e => setForm(f => ({ ...f, max_comments_per_post: +e.target.value }))} className={inputCls} />
         </div>
       </div>
 

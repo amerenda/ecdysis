@@ -33,6 +33,8 @@ export interface AgentBehavior {
   auto_reply: boolean
   auto_like: boolean
   reply_to_own_threads: boolean
+  max_replies_per_heartbeat: number
+  max_comments_per_post: number
   post_jitter_pct: number
   karma_throttle: boolean
   karma_throttle_threshold: number

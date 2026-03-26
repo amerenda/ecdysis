@@ -328,6 +328,8 @@ async def get_moltbook_agents():
                 "auto_reply": row["auto_reply"],
                 "auto_like": row["auto_like"],
                 "reply_to_own_threads": row["reply_to_own_threads"],
+                "max_replies_per_heartbeat": row.get("max_replies_per_heartbeat", 2),
+                "max_comments_per_post": row.get("max_comments_per_post", 3),
                 "post_jitter_pct": row["post_jitter_pct"],
                 "karma_throttle": row["karma_throttle"],
                 "karma_throttle_threshold": row["karma_throttle_threshold"],
@@ -414,6 +416,7 @@ async def update_moltbook_agent(slot: int, req: AgentUpdateRequest):
     if req.behavior:
         for field in (
             "max_post_length", "auto_reply", "auto_like", "reply_to_own_threads",
+            "max_replies_per_heartbeat", "max_comments_per_post",
             "post_jitter_pct", "karma_throttle", "karma_throttle_threshold",
             "karma_throttle_multiplier", "target_submolts", "exclude_submolts", "auto_dm_approve",
             "receive_peer_likes", "receive_peer_comments", "send_peer_likes",
