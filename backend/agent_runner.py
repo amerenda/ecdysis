@@ -626,9 +626,34 @@ class AgentRunner:
 
         topics = self.config.persona.topics
         max_len = beh.max_post_length
+
+        # Gather recent post titles to avoid repetition
+        past_activity = await db.read_moltbook_activity(self.pool, self.slot, n=200)
+        recent_titles = []
+        for entry in past_activity:
+            if entry["action"] == "posted":
+                detail = entry.get("detail", "")
+                # Extract title from "New post: 'Title' → m/submolt [id]"
+                if "'" in detail:
+                    start = detail.index("'") + 1
+                    end = detail.index("'", start) if "'" in detail[start:] else len(detail)
+                    title_text = detail[start:start + detail[start:].index("'")] if "'" in detail[start:] else detail[start:]
+                    if title_text:
+                        recent_titles.append(title_text)
+            if len(recent_titles) >= 20:
+                break
+
+        avoid_text = ""
+        if recent_titles:
+            titles_list = "\n".join(f"- {t}" for t in recent_titles)
+            avoid_text = (
+                f"\n\nYou have already posted about these topics recently — "
+                f"do NOT repeat or rephrase any of them. Write about something fresh:\n{titles_list}"
+            )
+
         content = await self._llm(
             f"Choose one topic from {topics} and write a genuine post. "
-            f"Title on first line, content below. Max {max_len} chars. No hashtags."
+            f"Title on first line, content below. Max {max_len} chars. No hashtags.{avoid_text}"
         )
         if not content:
             if self.config.behavior.log_skipped:
