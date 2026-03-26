@@ -340,20 +340,28 @@ class AgentRunner:
             return
         max_per_post = self.config.behavior.max_comments_per_post
         try:
+            # Use activity log to track replies — Moltbook API doesn't return nested comments
+            past_activity = await db.read_moltbook_activity(self.pool, self.slot, n=200)
+            reply_count = sum(
+                1 for e in past_activity
+                if e["action"] == "replied" and post_id in e.get("detail", "")
+            )
+            if reply_count >= max_per_post:
+                await self.client.mark_notifications_read(post_id)
+                if self.config.behavior.log_skipped:
+                    await self.log("skipped_reply", f"Already replied {reply_count}/{max_per_post} times to {post_id}")
+                return
+
+            # Find last time we replied to this post
+            last_reply_ts = None
+            for e in past_activity:
+                if e["action"] == "replied" and post_id in e.get("detail", ""):
+                    last_reply_ts = e["created_at"]
+                    break
+
             data = await self.client.get_comments(post_id, sort="new", limit=35)
             own_name = self.config.persona.name
             comments = data.get("comments", [])
-
-            # Count how many comments the agent already has on this post
-            own_comments = [c for c in comments if c.get("author", {}).get("name") == own_name]
-            if len(own_comments) >= max_per_post:
-                await self.client.mark_notifications_read(post_id)
-                if self.config.behavior.log_skipped:
-                    await self.log("skipped_reply", f"Already have {len(own_comments)}/{max_per_post} comments on {post_id}")
-                return
-
-            # Find the agent's most recent comment timestamp on this post
-            last_own_ts = max((c.get("created_at", "") for c in own_comments), default="")
 
             # Collect new comments worth considering
             candidates = []
@@ -361,8 +369,9 @@ class AgentRunner:
                 author = comment.get("author", {}).get("name", "someone")
                 if author == own_name:
                     continue
+                # Skip comments that existed before our last reply
                 comment_ts = comment.get("created_at", "")
-                if last_own_ts and comment_ts <= last_own_ts:
+                if last_reply_ts and comment_ts <= str(last_reply_ts):
                     continue
                 content = comment.get("content", "")
                 if content:
@@ -500,14 +509,14 @@ class AgentRunner:
                 pid = post.get("id")
                 if not pid:
                     continue
-                # Check how many comments we already have on this post
-                try:
-                    data = await self.client.get_comments(pid, sort="new", limit=20)
-                    own_count = sum(1 for c in data.get("comments", []) if c.get("author", {}).get("name") == own_name)
-                    if own_count >= 2:
-                        continue  # enough thread continuation on this post
-                except Exception:
-                    continue
+                # Check how many times we've replied to this post (from activity log)
+                past_activity = await db.read_moltbook_activity(self.pool, self.slot, n=200)
+                thread_count = sum(
+                    1 for e in past_activity
+                    if e["action"] in ("replied", "thread_reply") and pid in e.get("detail", "")
+                )
+                if thread_count >= 2:
+                    continue  # enough thread continuation on this post
                 # Only thread ~20% of the time to avoid spam
                 if random.random() > 0.2:
                     continue
