@@ -448,8 +448,9 @@ class AgentRunner:
                 if post_author == own_name:
                     continue  # never upvote or comment on own posts
                 is_peer = post_author in peer_names
-                # skip if we already liked this post via peer interaction
-                if pid not in peer_db.liked_post_ids:
+                # Upvote if auto_like is enabled (or peer likes for peers)
+                should_like = (self.config.behavior.auto_like and not is_peer) or (is_peer and self.config.behavior.send_peer_likes)
+                if should_like and pid not in peer_db.liked_post_ids:
                     try:
                         await self.client.upvote_post(pid)
                         upvoted += 1
