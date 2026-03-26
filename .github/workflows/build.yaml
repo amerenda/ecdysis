@@ -60,45 +60,31 @@ jobs:
           docker push "amerenda/ecdysis-backend:${TAG}"
           docker push "amerenda/ecdysis-backend:latest"
 
-      - name: Deploy to UAT
+      - name: Create deploy PR (UAT + prod)
         env:
           TAG: ${{ steps.tag.outputs.tag }}
+          PREFIX: ${{ steps.tag.outputs.pr_prefix }}
         run: |
           rm -rf /tmp/gitops
           git clone https://x-access-token:${GITOPS_PAT}@github.com/${GITOPS_REPO}.git /tmp/gitops
           cd /tmp/gitops
 
-          sed -i "s|image: amerenda/ecdysis-frontend:[^ ]*|image: amerenda/ecdysis-frontend:${TAG}|g" \
-            apps/ecdysis/frontend-uat/deployment.yaml
-          sed -i "s|image: amerenda/ecdysis-backend:[^ ]*|image: amerenda/ecdysis-backend:${TAG}|g" \
-            apps/ecdysis/ecdysis-backend-uat/deployment.yaml
-
-          git config user.name "claude-automation"
-          git config user.email "claude-automation@amerenda.com"
-          git add -A
-          git diff --cached --quiet && exit 0
-          git commit -m "deploy-uat: ecdysis ${TAG}"
-          git push origin main
-
-      - name: Create prod deploy PR
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
-          PREFIX: ${{ steps.tag.outputs.pr_prefix }}
-        run: |
-          cd /tmp/gitops
-          git pull origin main
-
-          BRANCH="${PREFIX}/ecdysis-prod-${TAG}"
+          BRANCH="${PREFIX}/ecdysis-${TAG}"
           git checkout -b "${BRANCH}"
 
+          # Update both UAT and prod manifests on the same branch
           sed -i "s|image: amerenda/ecdysis-frontend:[^ ]*|image: amerenda/ecdysis-frontend:${TAG}|g" \
+            apps/ecdysis/frontend-uat/deployment.yaml \
             apps/ecdysis/frontend/deployment-frontend.yaml
           sed -i "s|image: amerenda/ecdysis-backend:[^ ]*|image: amerenda/ecdysis-backend:${TAG}|g" \
+            apps/ecdysis/ecdysis-backend-uat/deployment.yaml \
             apps/ecdysis/ecdysis-backend/deployment.yaml
 
+          git config user.name "deploy-bot[bot]"
+          git config user.email "deploy-bot[bot]@users.noreply.github.com"
           git add -A
           git diff --cached --quiet && exit 0
-          git commit -m "${PREFIX}: ecdysis prod ${TAG}"
+          git commit -m "${PREFIX}: ecdysis ${TAG}"
           git push origin "${BRANCH}"
 
           curl -s -X POST \
@@ -106,8 +92,8 @@ jobs:
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/${GITOPS_REPO}/pulls" \
             -d "{
-              \"title\": \"${PREFIX}: ecdysis prod ${TAG}\",
-              \"body\": \"Promote ecdysis to production.\\n\\nUAT deployed automatically.\\n\\nImages:\\n- \`amerenda/ecdysis-frontend:${TAG}\`\\n- \`amerenda/ecdysis-backend:${TAG}\`\\n\\nSource: https://github.com/amerenda/ecdysis/commit/${GITHUB_SHA}\",
+              \"title\": \"${PREFIX}: ecdysis ${TAG}\",
+              \"body\": \"Deploy ecdysis ${TAG}.\\n\\nUAT deploys automatically when this PR opens (via ApplicationSet).\\nProd deploys when this PR is merged.\\n\\nImages:\\n- \`amerenda/ecdysis-frontend:${TAG}\`\\n- \`amerenda/ecdysis-backend:${TAG}\`\\n\\nSource: https://github.com/amerenda/ecdysis/commit/${GITHUB_SHA}\",
               \"head\": \"${BRANCH}\",
               \"base\": \"main\"
             }"
