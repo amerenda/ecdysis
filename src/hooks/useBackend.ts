@@ -53,6 +53,7 @@ export function useModels() {
   return useQuery<OllamaModel[]>({
     queryKey: ['models'],
     queryFn: () => get('/api/models'),
+    select: (data) => [...data].sort((a, b) => a.name.localeCompare(b.name)),
   })
 }
 
