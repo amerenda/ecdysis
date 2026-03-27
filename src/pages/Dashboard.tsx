@@ -10,9 +10,9 @@ function isCreated(a: Agent) {
 
 export function Dashboard() {
   const agents = useAgents()
-  const gpu = useGpu()
-
   const created = agents.data?.filter(isCreated) ?? []
+  const runnerId = created.find(a => a.llm_runner_id)?.llm_runner_id
+  const gpu = useGpu(runnerId)
   const runningCount = created.filter((a: Agent) => a.running).length
   const enabledCount = created.filter((a: Agent) => a.enabled).length
 

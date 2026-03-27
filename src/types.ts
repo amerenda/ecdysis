@@ -63,6 +63,7 @@ export interface Agent {
   slot: number
   enabled: boolean
   model: string
+  llm_runner_id: number | null
   api_key: string
   registered: boolean
   claimed: boolean
