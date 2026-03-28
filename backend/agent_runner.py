@@ -284,7 +284,19 @@ class AgentRunner:
                 except Exception:
                     pass  # Non-critical, will retry next heartbeat
 
-            home = await self.client.home()
+            # Retry home() with short intervals — Moltbook 500s are intermittent
+            home = None
+            for home_attempt in range(4):
+                try:
+                    home = await self.client.home()
+                    break
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 500 and home_attempt < 3:
+                        wait = [60, 120, 180][home_attempt]
+                        await self.log("heartbeat", f"Moltbook /home returned 500 — retrying in {wait}s (attempt {home_attempt + 2}/4)")
+                        await asyncio.sleep(wait)
+                    else:
+                        raise
             self.state.karma = home.get("your_account", {}).get("karma", self.state.karma)
             self.state.last_heartbeat = datetime.now(timezone.utc)
             await self._save_state()
