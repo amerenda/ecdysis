@@ -49,10 +49,16 @@ class AgentRunner:
         await db.append_moltbook_activity(self.pool, self.slot, action, detail)
         logger.info("[agent-%d] [%s] %s", self.slot, action, detail)
 
-    async def _llm(self, prompt: str, system: str | None = None) -> str:
+    async def _get_common_md(self) -> str:
+        """Load COMMON.md from global config, cached per heartbeat."""
+        if not hasattr(self, '_common_md_cache'):
+            self._common_md_cache = await db.get_global_config(self.pool, "common_md")
+        return self._common_md_cache
+
+    def _build_base_system_prompt(self) -> str:
+        """Build the default system prompt from persona, soul, rules, memory."""
         p = self.config.persona
         soul = getattr(self.config, 'soul_md', '') or ''
-        # If SOUL.md is set, it replaces tone entirely
         tone_line = f"Tone: {p.tone}\n" if (p.tone and not soul) else ""
         base = (
             f"You are {p.name} on Moltbook, a social network for AI agents.\n"
@@ -64,15 +70,22 @@ class AgentRunner:
         )
         if soul:
             base += f"\n\n--- Soul ---\n{soul}"
-        # RULES.md — guardrails
         rules = getattr(self.config, 'rules_md', '') or ''
         if rules:
             base += f"\n\n--- Rules ---\n{rules}"
-        # MEMORY.md — persistent context from past interactions
         memory = getattr(self.config, 'memory_md', '') or ''
         if memory:
             base += f"\n\n--- Memory ---\n{memory}"
-        sys_prompt = system or base
+        return base
+
+    async def _llm(self, prompt: str, system: str | None = None) -> str:
+        if system is None:
+            system = self._build_base_system_prompt()
+        # Inject COMMON.md into all LLM calls
+        common = await self._get_common_md()
+        if common:
+            system = f"--- Common Instructions ---\n{common}\n\n{system}"
+        sys_prompt = system
         model = self.config.model
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=120)) as http:
@@ -214,6 +227,9 @@ class AgentRunner:
                 await self._run_heartbeat_inner()
 
     async def _run_heartbeat_inner(self):
+        # Clear cached common_md so it reloads each heartbeat
+        if hasattr(self, '_common_md_cache'):
+            del self._common_md_cache
         # Load fresh state from DB each heartbeat
         await self._load_state()
 
@@ -693,48 +709,73 @@ class AgentRunner:
         if rules:
             post_system += f"\n\n--- Rules ---\n{rules}"
 
-        content = await self._llm(
+        base_prompt = (
             f"Choose one topic from {topics} and write a genuine post.\n\n"
             f"You MUST use this exact format:\n"
             f"TITLE: Your title here\n"
             f"BODY: Your post content here\n\n"
-            f"Max {max_len} chars total. No hashtags. No markdown.{avoid_text}",
-            system=post_system,
+            f"Max {max_len} chars total. No hashtags. No markdown.{avoid_text}"
         )
-        if not content:
-            if self.config.behavior.log_skipped:
-                await self.log("skipped_post", "LLM returned empty content — post not created")
-            return
 
-        # Parse TITLE:/BODY: format
         title = ""
         body = ""
-        title_match = re.search(r"^TITLE:\s*(.+)", content, re.MULTILINE)
-        body_match = re.search(r"^BODY:\s*([\s\S]+)", content, re.MULTILINE)
-        if title_match and body_match:
-            title = title_match.group(1).strip()
-            body = body_match.group(1).strip()
+        for attempt in range(2):
+            prompt = base_prompt
+            if attempt > 0:
+                prompt += (
+                    "\n\nYour previous attempt was rejected. Make sure you use the exact format "
+                    "TITLE: on one line, then BODY: on the next. The title must be a short "
+                    "headline (3-15 words), not a bullet point or paragraph."
+                )
+
+            content = await self._llm(prompt, system=post_system)
+            if not content:
+                if self.config.behavior.log_skipped:
+                    await self.log("skipped_post", "LLM returned empty content — post not created")
+                return
+
+            # Parse TITLE:/BODY: format
+            title_match = re.search(r"^TITLE:\s*(.+)", content, re.MULTILINE)
+            body_match = re.search(r"^BODY:\s*([\s\S]+)", content, re.MULTILINE)
+            if title_match and body_match:
+                title = title_match.group(1).strip()
+                body = body_match.group(1).strip()
+            else:
+                lines = content.strip().splitlines()
+                title = lines[0].strip()
+                body = "\n".join(lines[1:]).strip()
+
+            # Clean up LLM artifacts from title
+            title = re.sub(r"^\*{1,2}(.*?)\*{1,2}$", r"\1", title)
+            title = re.sub(r"^(Title|Subject)\s*:\s*", "", title, flags=re.IGNORECASE)
+            title = title.lstrip("#").strip()
+            title = re.sub(r"#\w+", "", title).strip()
+            title = title[:200]
+
+            # Validate
+            if not title or not body:
+                logger.info("[agent-%d] Post attempt %d: no title/body split", self.slot, attempt + 1)
+                continue
+            if len(title.split()) < 2:
+                logger.info("[agent-%d] Post attempt %d: title too short (%s)", self.slot, attempt + 1, title)
+                continue
+            if title.startswith("- ") or title.startswith("* "):
+                logger.info("[agent-%d] Post attempt %d: title looks like bullet point", self.slot, attempt + 1)
+                continue
+            break
         else:
-            # Fallback: first line is title, rest is body
-            lines = content.strip().splitlines()
-            title = lines[0].strip()
-            body = "\n".join(lines[1:]).strip()
-
-        # Clean up LLM artifacts from title
-        title = re.sub(r"^\*{1,2}(.*?)\*{1,2}$", r"\1", title)  # strip **bold**
-        title = re.sub(r"^(Title|Subject)\s*:\s*", "", title, flags=re.IGNORECASE)  # strip "Title:" prefix
-        title = title.lstrip("#").strip()  # strip markdown headings
-        title = re.sub(r"#\w+", "", title).strip()  # strip hashtags
-        title = title[:200]  # cap title length
-
-        # If LLM didn't produce a title/body split, skip the post
-        if not title or not body:
             if self.config.behavior.log_skipped:
-                await self.log("skipped_post", "LLM didn't produce title + body split — skipping")
+                await self.log("skipped_post", "LLM failed validation after retry — skipping")
             return
 
-        # Cap body length
         body = body[:max_len]
+
+        # Trigram similarity check — reject near-duplicate titles
+        similar = await db.check_title_similarity(self.pool, title, threshold=0.5)
+        if similar:
+            if self.config.behavior.log_skipped:
+                await self.log("skipped_post", f"Title too similar to recent post: '{similar[:80]}'")
+            return
 
         try:
             result = await self._post_with_challenge(
@@ -749,6 +790,7 @@ class AgentRunner:
             if isinstance(result, dict):
                 post_id = result.get("id", "") or result.get("post", {}).get("id", "")
             await self.log("posted", f"New post: '{title}' → m/{submolt} [{post_id}]")
+            await db.record_post(self.pool, self.slot, title)
         except httpx.HTTPStatusError as e:
             body = e.response.text[:300] if e.response else ""
             logger.error("Post error slot %d: %s — %s", self.slot, e, body)

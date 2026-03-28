@@ -29,6 +29,16 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
   return r.json()
 }
 
+async function put<T>(path: string, body: unknown): Promise<T> {
+  const r = await fetch(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
+  return r.json()
+}
+
 // ── Health ────────────────────────────────────────────────────────────────────
 
 export function useHealth() {
@@ -215,6 +225,23 @@ export function useSystemLogs(source?: string, level?: string, slot?: number) {
     queryKey: ['system-logs', source, level, slot],
     queryFn: () => get(`/api/logs?${query}`),
     refetchInterval: 5_000,
+  })
+}
+
+// ── Global Config ───────────────────────────────────────────────────────────
+
+export function useCommonConfig() {
+  return useQuery<{ common_md: string }>({
+    queryKey: ['common-config'],
+    queryFn: () => get('/api/config/common'),
+  })
+}
+
+export function useUpdateCommonConfig() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (common_md: string) => put('/api/config/common', { common_md }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['common-config'] }),
   })
 }
 

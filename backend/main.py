@@ -296,6 +296,25 @@ async def get_system_logs(source: Optional[str] = None, level: Optional[str] = N
     return logs
 
 
+# ── Global config ────────────────────────────────────────────────────────────
+
+
+@app.get("/api/config/common")
+async def get_common_config():
+    value = await db.get_global_config(app.state.db, "common_md")
+    return {"common_md": value}
+
+
+class CommonConfigUpdate(BaseModel):
+    common_md: str
+
+
+@app.put("/api/config/common")
+async def update_common_config(req: CommonConfigUpdate):
+    await db.set_global_config(app.state.db, "common_md", req.common_md)
+    return {"ok": True}
+
+
 # ── Moltbook agent config ────────────────────────────────────────────────────
 
 

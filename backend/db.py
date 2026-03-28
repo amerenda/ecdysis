@@ -110,12 +110,32 @@ CREATE TABLE IF NOT EXISTS validated_submolts (
     name TEXT PRIMARY KEY,
     validated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS global_config (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS post_history (
+    id BIGSERIAL PRIMARY KEY,
+    slot INT NOT NULL,
+    title TEXT NOT NULL,
+    title_normalized TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_post_history_created ON post_history (created_at DESC);
 """
 
 
 async def init_db(pool: asyncpg.Pool) -> None:
     """Create moltbook tables if they don't exist, and run migrations."""
     async with pool.acquire() as conn:
+        # Enable pg_trgm for fuzzy title matching
+        try:
+            await conn.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+        except Exception:
+            logger.warning("Could not create pg_trgm extension (may need superuser)")
         await conn.execute(CREATE_TABLES_SQL)
 
         # Migration: add heartbeat_md to moltbook_configs
@@ -736,3 +756,62 @@ async def cache_valid_submolt(pool: asyncpg.Pool, name: str) -> None:
             "INSERT INTO validated_submolts (name) VALUES ($1) ON CONFLICT DO NOTHING",
             name,
         )
+
+
+# ── Global config ────────────────────────────────────────────────────────────
+
+
+async def get_global_config(pool: asyncpg.Pool, key: str) -> str:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT value FROM global_config WHERE key = $1", key,
+        )
+    return row["value"] if row else ""
+
+
+async def set_global_config(pool: asyncpg.Pool, key: str, value: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """INSERT INTO global_config (key, value) VALUES ($1, $2)
+               ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value""",
+            key, value,
+        )
+
+
+# ── Post history (trigram dedup) ─────────────────────────────────────────────
+
+
+def _normalize_title(title: str) -> str:
+    """Lowercase, strip punctuation and extra whitespace for fuzzy matching."""
+    import re
+    t = title.lower().strip()
+    t = re.sub(r"[^\w\s]", "", t)
+    t = re.sub(r"\s+", " ", t)
+    return t.strip()
+
+
+async def record_post(pool: asyncpg.Pool, slot: int, title: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO post_history (slot, title, title_normalized) VALUES ($1, $2, $3)",
+            slot, title, _normalize_title(title),
+        )
+
+
+async def check_title_similarity(pool: asyncpg.Pool, title: str, threshold: float = 0.5) -> Optional[str]:
+    """Check if a title is too similar to a recent post. Returns the matching title or None."""
+    normalized = _normalize_title(title)
+    if not normalized:
+        return None
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """SELECT title, similarity(title_normalized, $1) AS sim
+               FROM post_history
+               WHERE created_at > NOW() - INTERVAL '7 days'
+               ORDER BY similarity(title_normalized, $1) DESC
+               LIMIT 1""",
+            normalized,
+        )
+    if row and row["sim"] >= threshold:
+        return row["title"]
+    return None
