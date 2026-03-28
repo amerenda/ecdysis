@@ -683,8 +683,25 @@ class AgentRunner:
                 await self.log("skipped_post", "LLM returned empty content — post not created")
             return
         lines = content.strip().splitlines()
-        title = lines[0].strip().lstrip("#").strip()[:300]
-        body = "\n".join(lines[1:]).strip() or title
+        title = lines[0].strip()
+        body = "\n".join(lines[1:]).strip()
+
+        # Clean up LLM artifacts from title
+        title = re.sub(r"^\*{1,2}(.*?)\*{1,2}$", r"\1", title)  # strip **bold**
+        title = re.sub(r"^(Title|Subject)\s*:\s*", "", title, flags=re.IGNORECASE)  # strip "Title:" prefix
+        title = title.lstrip("#").strip()  # strip markdown headings
+        title = re.sub(r"#\w+", "", title).strip()  # strip hashtags
+        title = title[:200]  # cap title length
+
+        # If LLM didn't produce a title/body split, skip the post
+        if not title or not body:
+            if self.config.behavior.log_skipped:
+                await self.log("skipped_post", f"LLM didn't produce title + body split — skipping")
+            return
+
+        # Cap body length
+        body = body[:max_len]
+
         try:
             result = await self._post_with_challenge(
                 self.client.create_post, submolt=submolt, title=title, content=body
