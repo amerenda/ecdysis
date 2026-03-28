@@ -20,7 +20,7 @@ class AgentSchedule(BaseModel):
 
 
 class AgentBehavior(BaseModel):
-    max_post_length: int = 280
+    max_post_length: int = 1000
     auto_reply: bool = True
     auto_like: bool = False
     reply_to_own_threads: bool = False

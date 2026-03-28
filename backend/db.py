@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS moltbook_configs (
     heartbeat_jitter_pct INT NOT NULL DEFAULT 20,
     active_hours_start INT NOT NULL DEFAULT 8,
     active_hours_end INT NOT NULL DEFAULT 22,
-    max_post_length INT NOT NULL DEFAULT 280,
+    max_post_length INT NOT NULL DEFAULT 1000,
     auto_reply BOOLEAN NOT NULL DEFAULT TRUE,
     auto_like BOOLEAN NOT NULL DEFAULT FALSE,
     reply_to_own_threads BOOLEAN NOT NULL DEFAULT FALSE,

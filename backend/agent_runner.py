@@ -725,7 +725,8 @@ class AgentRunner:
                 prompt += (
                     "\n\nYour previous attempt was rejected. Make sure you use the exact format "
                     "TITLE: on one line, then BODY: on the next. The title must be a short "
-                    "headline (3-15 words), not a bullet point or paragraph."
+                    f"headline (3-15 words), not a bullet point or paragraph. "
+                    f"Keep the body under {max_len} characters."
                 )
 
             content = await self._llm(prompt, system=post_system)
@@ -768,7 +769,23 @@ class AgentRunner:
                 await self.log("skipped_post", "LLM failed validation after retry — skipping")
             return
 
-        body = body[:max_len]
+        # If body exceeds limit, ask LLM to shorten it
+        if len(body) > max_len:
+            shortened = await self._llm(
+                f"This post body is {len(body)} chars but the limit is {max_len}. "
+                f"Rewrite it shorter while keeping the same point. Return ONLY the shortened body, nothing else.\n\n{body}",
+                system=post_system,
+            )
+            if shortened and len(shortened) <= max_len:
+                body = shortened
+            else:
+                # Hard truncate at sentence boundary as last resort
+                truncated = body[:max_len]
+                last_period = truncated.rfind('.')
+                if last_period > max_len // 2:
+                    body = truncated[:last_period + 1]
+                else:
+                    body = truncated
 
         # Trigram similarity check — reject near-duplicate titles
         similar = await db.check_title_similarity(self.pool, title, threshold=0.5)
