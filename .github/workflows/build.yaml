@@ -48,7 +48,7 @@ jobs:
         env:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          docker build -t "amerenda/ecdysis-frontend:${TAG}" -t "amerenda/ecdysis-frontend:latest" .
+          docker build --no-cache -t "amerenda/ecdysis-frontend:${TAG}" -t "amerenda/ecdysis-frontend:latest" .
           docker push "amerenda/ecdysis-frontend:${TAG}"
           docker push "amerenda/ecdysis-frontend:latest"
 
