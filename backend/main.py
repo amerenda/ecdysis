@@ -96,7 +96,28 @@ LLM_MANAGER_URL = os.environ.get(
     "LLM_MANAGER_URL",
     "http://llm-manager-backend.llm-manager.svc.cluster.local:8081",
 )
-LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+LLM_REGISTRATION_SECRET = os.environ.get("LLM_REGISTRATION_SECRET", "")
+# Populated on startup via /api/apps/discover
+_llm_api_key: str = ""
+
+
+async def _discover_llm_api_key() -> str:
+    """Call llm-manager's discover endpoint to get (or create) our API key."""
+    global _llm_api_key
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{LLM_MANAGER_URL}/api/apps/discover",
+            json={
+                "name": "ecdysis",
+                "base_url": "",
+                "registration_secret": LLM_REGISTRATION_SECRET,
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        _llm_api_key = data.get("api_key", "")
+        logger.info("Discovered LLM API key from llm-manager (key=%s...)", _llm_api_key[:8])
+        return _llm_api_key
 
 
 def _make_runner(config: AgentConfig, pool: asyncpg.Pool) -> AgentRunner:
@@ -104,7 +125,7 @@ def _make_runner(config: AgentConfig, pool: asyncpg.Pool) -> AgentRunner:
         config,
         pool=pool,
         llm_base=LLM_MANAGER_URL,
-        llm_api_key=LLM_API_KEY,
+        llm_api_key=_llm_api_key,
         lock_conn=_lock_conn,
         heartbeat_gate=_heartbeat_gate,
     )
@@ -139,6 +160,13 @@ async def lifespan(app: FastAPI):
     for h in db_log_handlers:
         await h.start_flush_loop()
     app.state.db_log_handlers = db_log_handlers
+
+    # Discover LLM API key from llm-manager
+    if LLM_REGISTRATION_SECRET:
+        try:
+            await _discover_llm_api_key()
+        except Exception as e:
+            logger.error("Failed to discover LLM API key: %s — agents will not be able to call LLM", e)
 
     # Dedicated connection for advisory locks (not from pool)
     _lock_conn = await asyncpg.connect(DATABASE_URL)
