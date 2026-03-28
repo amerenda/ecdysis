@@ -89,6 +89,11 @@ export function AgentCard({ agent }: Props) {
                 Enabled
               </span>
             )}
+            {agent.registered && agent.claimed && !agent.enabled && (
+              <span className="text-xs bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded">
+                Disabled
+              </span>
+            )}
             {!agent.has_recent_error && agent.behavior.invalid_submolts && agent.behavior.invalid_submolts.length > 0 && (
               <span className="text-xs bg-amber-900 text-amber-300 px-1.5 py-0.5 rounded">
                 Warning
