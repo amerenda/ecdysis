@@ -229,6 +229,73 @@ app.add_middleware(
 # ── Health ────────────────────────────────────────────────────────────────────
 
 
+@app.get("/api/gpu")
+async def gpu_info():
+    """GPU info from llm-manager, filtered to runners available to ecdysis."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            # Get allowed runners for this app
+            resp = await client.get(
+                f"{LLM_MANAGER_URL}/api/llm/status",
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        # Get our allowed runner IDs
+        allowed_ids = set()
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(
+                    f"{LLM_MANAGER_URL}/api/runners",
+                )
+                resp.raise_for_status()
+                all_runners = resp.json()
+
+                # Look up our app's allowed runners
+                apps_resp = await client.get(
+                    f"{LLM_MANAGER_URL}/api/apps",
+                )
+                apps_resp.raise_for_status()
+                for a in apps_resp.json():
+                    if a.get("name") == "ecdysis":
+                        ids = a.get("allowed_runner_ids", [])
+                        if ids:
+                            allowed_ids = set(ids)
+                        break
+        except Exception:
+            pass  # If we can't filter, show all runners
+
+        runner_statuses = data.get("runners", [])
+        if allowed_ids:
+            runner_statuses = [r for r in runner_statuses if r.get("runner_id") in allowed_ids]
+
+        total_vram = 0.0
+        used_vram = 0.0
+        runners_info = []
+        for r in runner_statuses:
+            rv_total = r.get("gpu_vram_total_gb", 0)
+            rv_used = r.get("gpu_vram_used_gb", 0)
+            total_vram += rv_total
+            used_vram += rv_used
+            runners_info.append({
+                "name": r.get("node", r.get("runner_hostname", "unknown")),
+                "runner_id": r.get("runner_id"),
+                "vram_total_gb": round(rv_total, 2),
+                "vram_used_gb": round(rv_used, 2),
+                "vram_free_gb": round(rv_total - rv_used, 2),
+            })
+
+        return {
+            "vram_total_gb": round(total_vram, 2),
+            "vram_used_gb": round(used_vram, 2),
+            "vram_free_gb": round(total_vram - used_vram, 2),
+            "runners": runners_info,
+        }
+    except Exception as e:
+        logger.error("GPU info error: %s", e)
+        return {"vram_total_gb": 0, "vram_used_gb": 0, "vram_free_gb": 0, "runners": []}
+
+
 @app.get("/health")
 async def health():
     db_ok = app.state.db is not None

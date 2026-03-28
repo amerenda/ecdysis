@@ -1,8 +1,16 @@
-export interface GpuInfo {
+export interface RunnerGpuInfo {
   name: string
+  runner_id: number
   vram_total_gb: number
   vram_used_gb: number
   vram_free_gb: number
+}
+
+export interface GpuInfo {
+  vram_total_gb: number
+  vram_used_gb: number
+  vram_free_gb: number
+  runners: RunnerGpuInfo[]
 }
 
 export interface OllamaModel {

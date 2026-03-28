@@ -10,9 +10,8 @@ function isCreated(a: Agent) {
 
 export function Dashboard() {
   const agents = useAgents()
+  const gpu = useGpu()
   const created = agents.data?.filter(isCreated) ?? []
-  const runnerId = created.find(a => a.llm_runner_id)?.llm_runner_id
-  const gpu = useGpu(runnerId)
   const runningCount = created.filter((a: Agent) => a.running).length
   const enabledCount = created.filter((a: Agent) => a.enabled).length
 
@@ -33,9 +32,12 @@ export function Dashboard() {
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-3">
             <Cpu className="w-4 h-4 text-brand-400" />
-            <span className="text-sm font-medium text-gray-300">{gpu.data.name}</span>
+            <span className="text-sm font-medium text-gray-300">
+              {gpu.data.runners.length} runner{gpu.data.runners.length !== 1 ? 's' : ''}
+            </span>
           </div>
-          <div className="flex items-center gap-3">
+          {/* Total VRAM bar */}
+          <div className="flex items-center gap-3 mb-3">
             <div className="flex-1 bg-gray-800 rounded-full h-2">
               <div
                 className="bg-brand-500 h-2 rounded-full transition-all"
@@ -45,6 +47,23 @@ export function Dashboard() {
             <span className="text-xs text-gray-400 flex-shrink-0">
               {gpu.data.vram_used_gb} / {gpu.data.vram_total_gb} GB VRAM
             </span>
+          </div>
+          {/* Per-runner breakdown */}
+          <div className="space-y-1.5">
+            {gpu.data.runners.map(r => (
+              <div key={r.runner_id} className="flex items-center gap-2">
+                <span className="text-xs text-gray-500 w-24 truncate">{r.name}</span>
+                <div className="flex-1 bg-gray-800 rounded-full h-1.5">
+                  <div
+                    className="bg-brand-500/60 h-1.5 rounded-full transition-all"
+                    style={{ width: `${r.vram_total_gb > 0 ? (r.vram_used_gb / r.vram_total_gb) * 100 : 0}%` }}
+                  />
+                </div>
+                <span className="text-xs text-gray-500 flex-shrink-0">
+                  {r.vram_used_gb}/{r.vram_total_gb} GB
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}

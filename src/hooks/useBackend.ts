@@ -42,11 +42,10 @@ export function useHealth() {
 
 // ── GPU & Models ──────────────────────────────────────────────────────────────
 
-export function useGpu(runnerId?: number | null) {
-  const path = runnerId ? `/api/gpu?runner_id=${runnerId}` : '/api/gpu'
+export function useGpu() {
   return useQuery<GpuInfo>({
-    queryKey: ['gpu', runnerId],
-    queryFn: () => get(path),
+    queryKey: ['gpu'],
+    queryFn: () => get('/api/gpu'),
   })
 }
 
