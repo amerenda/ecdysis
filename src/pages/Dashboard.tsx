@@ -33,7 +33,7 @@ export function Dashboard() {
           <div className="flex items-center gap-2 mb-3">
             <Cpu className="w-4 h-4 text-brand-400" />
             <span className="text-sm font-medium text-gray-300">
-              {gpu.data.runners.length} runner{gpu.data.runners.length !== 1 ? 's' : ''}
+              {(gpu.data.runners?.length ?? 0)} runner{(gpu.data.runners?.length ?? 0) !== 1 ? 's' : ''}
             </span>
           </div>
           {/* Total VRAM bar */}
@@ -49,7 +49,7 @@ export function Dashboard() {
             </span>
           </div>
           {/* Per-runner breakdown */}
-          <div className="space-y-1.5">
+          {gpu.data.runners && <div className="space-y-1.5">
             {gpu.data.runners.map(r => (
               <div key={r.runner_id} className="flex items-center gap-2">
                 <span className="text-xs text-gray-500 w-24 truncate">{r.name}</span>
@@ -64,7 +64,7 @@ export function Dashboard() {
                 </span>
               </div>
             ))}
-          </div>
+          </div>}
         </div>
       )}
 
