@@ -26,17 +26,16 @@ class AgentRunner:
         self,
         config: AgentConfig,
         pool: asyncpg.Pool,
-        ollama_base: str,
-        ollama_model: str,
-        psk: str = "",
+        llm_base: str,
+        llm_api_key: str,
         lock_conn: asyncpg.Connection | None = None,
         heartbeat_gate: asyncio.Lock | None = None,
     ):
         self.config = config
         self.slot = config.slot
         self.pool = pool
-        self.ollama_base = ollama_base
-        self.ollama_model = ollama_model
+        self.llm_base = llm_base
+        self.llm_api_key = llm_api_key
         self.client = MoltbookClient(config.api_key)
         # State is loaded lazily on first heartbeat
         self.state: AgentState = AgentState(slot=self.slot)
@@ -45,7 +44,6 @@ class AgentRunner:
         self._heartbeat_lock = asyncio.Lock()
         self._heartbeat_gate = heartbeat_gate or asyncio.Lock()
         self._lock_conn = lock_conn
-        self._psk = psk
 
     async def log(self, action: str, detail: str):
         await db.append_moltbook_activity(self.pool, self.slot, action, detail)
@@ -75,12 +73,14 @@ class AgentRunner:
         if memory:
             base += f"\n\n--- Memory ---\n{memory}"
         sys_prompt = system or base
+        model = self.config.model
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=120)) as http:
                 r = await http.post(
-                    f"{self.ollama_base}/api/chat",
+                    f"{self.llm_base}/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {self.llm_api_key}"},
                     json={
-                        "model": self.ollama_model,
+                        "model": model,
                         "messages": [
                             {"role": "system", "content": sys_prompt},
                             {"role": "user", "content": prompt},
@@ -89,14 +89,13 @@ class AgentRunner:
                     },
                 )
                 r.raise_for_status()
-                content = r.json()["message"]["content"].strip()
+                content = r.json()["choices"][0]["message"]["content"].strip()
                 # Strip deepseek-r1 thinking tags if present
                 if "<think>" in content:
-                    import re
                     content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
                 return content
         except httpx.ReadTimeout:
-            logger.warning("LLM timeout slot %d (model=%s, prompt=%d chars)", self.slot, self.ollama_model, len(prompt))
+            logger.warning("LLM timeout slot %d (model=%s, prompt=%d chars)", self.slot, model, len(prompt))
             return ""
         except Exception as e:
             logger.error("LLM error slot %d: %s (%s)", self.slot, type(e).__name__, e)

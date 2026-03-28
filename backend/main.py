@@ -6,7 +6,7 @@ Runs on port 8082.
 import asyncio
 import logging
 import os
-import re
+
 import socket
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -39,7 +39,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-AGENT_PSK = os.environ.get("LLM_MANAGER_AGENT_PSK", "")
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://llm:llm@localhost:5432/llmmanager")
 NODE = socket.gethostname()
 API_BASE = "https://www.moltbook.com/api/v1"
@@ -91,60 +90,21 @@ async def _validate_submolts(pool, api_key: str, names: list[str]) -> tuple[list
     return valid, invalid
 
 
-# ── Runner helpers ────────────────────────────────────────────────────────────
+# ── LLM manager ──────────────────────────────────────────────────────────────
 
 LLM_MANAGER_URL = os.environ.get(
     "LLM_MANAGER_URL",
     "http://llm-manager-backend.llm-manager.svc.cluster.local:8081",
 )
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 
 
-async def _get_runners_from_llm_manager() -> list[dict]:
-    """Fetch active runners from llm-manager API."""
-    async with httpx.AsyncClient(timeout=5) as client:
-        resp = await client.get(f"{LLM_MANAGER_URL}/api/runners")
-        resp.raise_for_status()
-        return resp.json()
-
-
-async def _get_runner_ollama_base(runner_id: Optional[int] = None) -> str:
-    """Get Ollama URL for a runner. Replaces the runner port with 11434.
-    Ollama always uses plain HTTP regardless of agent protocol."""
-    try:
-        runners_list = await _get_runners_from_llm_manager()
-    except Exception as e:
-        logger.error("Failed to fetch runners from llm-manager: %s", e)
-        raise HTTPException(503, "Cannot reach llm-manager for runner info")
-    if not runners_list:
-        raise HTTPException(503, "No active llm-runners available")
-    if runner_id is not None:
-        r = next((x for x in runners_list if x["id"] == runner_id), None)
-        if not r:
-            r = runners_list[0]
-    else:
-        # Pick the runner with the most VRAM (most likely to have models)
-        def _runner_vram(runner):
-            caps = runner.get("capabilities", {})
-            if isinstance(caps, dict):
-                return caps.get("gpu_vram_total_bytes", 0)
-            return 0
-        r = max(runners_list, key=_runner_vram)
-    # runner address is like https://10.x.x.x:8090
-    # ollama is on the same host at port 11434, always plain HTTP
-    addr = r["address"]
-    # Strip scheme and port, rebuild as http with Ollama port
-    host = re.sub(r'^https?://', '', addr)
-    host = re.sub(r':\d+$', '', host)
-    return f"http://{host}:11434"
-
-
-def _make_runner(config: AgentConfig, pool: asyncpg.Pool, ollama_base: str) -> AgentRunner:
+def _make_runner(config: AgentConfig, pool: asyncpg.Pool) -> AgentRunner:
     return AgentRunner(
         config,
         pool=pool,
-        ollama_base=ollama_base,
-        ollama_model=config.model,
-        psk=AGENT_PSK,
+        llm_base=LLM_MANAGER_URL,
+        llm_api_key=LLM_API_KEY,
         lock_conn=_lock_conn,
         heartbeat_gate=_heartbeat_gate,
     )
@@ -195,14 +155,7 @@ async def lifespan(app: FastAPI):
                 logger.info("Slot %d locked on first attempt, will retry", slot)
                 continue
             config = config_from_db(row)
-            try:
-                ollama_base = await _get_runner_ollama_base(row.get("llm_runner_id"))
-            except HTTPException:
-                logger.warning(
-                    "No runners available for slot %d, deferring start", slot
-                )
-                continue
-            r = _make_runner(config, pool, ollama_base)
+            r = _make_runner(config, pool)
             runners[config.slot] = r
             r.start()
             logger.info(
@@ -222,12 +175,7 @@ async def lifespan(app: FastAPI):
                 logger.info("Slot %d still locked — running on another replica", slot)
                 continue
             config = config_from_db(row)
-            try:
-                ollama_base = await _get_runner_ollama_base(row.get("llm_runner_id"))
-            except HTTPException:
-                logger.warning("No runners available for slot %d, deferring start", slot)
-                continue
-            r = _make_runner(config, pool, ollama_base)
+            r = _make_runner(config, pool)
             runners[config.slot] = r
             r.start()
             logger.info("Auto-started moltbook agent %d (%s) [lock acquired on retry]", config.slot, config.persona.name)
@@ -448,13 +396,9 @@ async def update_moltbook_agent(slot: int, req: AgentUpdateRequest):
     updated_row = await db.get_moltbook_config(pool, slot)
     if updated_row["enabled"] and updated_row["api_key"]:
         config = config_from_db(updated_row)
-        try:
-            ollama_base = await _get_runner_ollama_base(updated_row.get("llm_runner_id"))
-            r = _make_runner(config, pool, ollama_base)
-            runners[slot] = r
-            r.start()
-        except HTTPException:
-            logger.warning("No runners available for slot %d after update", slot)
+        r = _make_runner(config, pool)
+        runners[slot] = r
+        r.start()
 
     return {"ok": True, "invalid_submolts": submolt_warnings}
 
@@ -474,11 +418,7 @@ async def start_moltbook_agent(slot: int):
     if _lock_conn and not await _try_acquire_agent_lock(_lock_conn, slot):
         raise HTTPException(409, "Agent is running on another pod")
     config = config_from_db(row)
-    try:
-        ollama_base = await _get_runner_ollama_base(row.get("llm_runner_id"))
-    except HTTPException:
-        raise HTTPException(503, "No active llm-runners available to start agent")
-    r = _make_runner(config, pool, ollama_base)
+    r = _make_runner(config, pool)
     runners[slot] = r
     r.start()
     await db.upsert_moltbook_config(pool, slot, enabled=True)
@@ -516,11 +456,7 @@ async def _ensure_runner(slot: int) -> AgentRunner:
     if not row or not row.get("api_key"):
         raise HTTPException(status_code=400, detail="Agent not registered — no API key")
     config = config_from_db(row)
-    try:
-        ollama_base = await _get_runner_ollama_base(row.get("llm_runner_id"))
-    except HTTPException:
-        raise HTTPException(status_code=400, detail="No runners available")
-    r = _make_runner(config, pool, ollama_base)
+    r = _make_runner(config, pool)
     runners[slot] = r
     return r
 
