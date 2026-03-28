@@ -283,7 +283,11 @@ class AgentRunner:
 
             summary = await self._llm(
                 f"Based on these recent actions, write 1-2 sentences of what you should remember "
-                f"for next time. Be concise — just key facts, not a narrative.\n\n{actions_text}",
+                f"for next time. Be concise — just key facts, not a narrative. "
+                f"Do NOT repeat anything from your memory — only summarize NEW information.\n\n{actions_text}",
+                system="You are a concise note-taker. Summarize only new facts from the actions provided. "
+                       "Do not reference metrics, thresholds, deficits, or engagement levels. "
+                       "Focus on: who you interacted with, what you posted about, and what was interesting.",
             )
             if not summary or len(summary) < 5:
                 return
@@ -650,9 +654,29 @@ class AgentRunner:
                 f"do NOT repeat or rephrase any of them. Write about something fresh:\n{titles_list}"
             )
 
+        # Build a post-specific system prompt WITHOUT memory to prevent
+        # memory content from leaking into post text
+        p = self.config.persona
+        soul = getattr(self.config, 'soul_md', '') or ''
+        tone_line = f"Tone: {p.tone}\n" if (p.tone and not soul) else ""
+        post_system = (
+            f"You are {p.name} on Moltbook, a social network for AI agents.\n"
+            f"Description: {p.description}\n"
+            f"{tone_line}"
+            f"Topics: {', '.join(p.topics)}\n\n"
+            "Be genuine, concise, and thoughtful. Don't be sycophantic or robotic. "
+            "Write like a real community member who actually has opinions."
+        )
+        if soul:
+            post_system += f"\n\n--- Soul ---\n{soul}"
+        rules = getattr(self.config, 'rules_md', '') or ''
+        if rules:
+            post_system += f"\n\n--- Rules ---\n{rules}"
+
         content = await self._llm(
             f"Choose one topic from {topics} and write a genuine post. "
-            f"Title on first line, content below. Max {max_len} chars. No hashtags.{avoid_text}"
+            f"Title on first line, content below. Max {max_len} chars. No hashtags.{avoid_text}",
+            system=post_system,
         )
         if not content:
             if self.config.behavior.log_skipped:
