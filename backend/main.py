@@ -234,45 +234,17 @@ async def gpu_info():
     """GPU info from llm-manager, filtered to runners available to ecdysis."""
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            # Get allowed runners for this app
             resp = await client.get(
                 f"{LLM_MANAGER_URL}/api/llm/status",
+                headers={"Authorization": f"Bearer {_llm_api_key}"},
             )
             resp.raise_for_status()
             data = resp.json()
 
-        # Get our allowed runner IDs
-        allowed_ids = set()
-        try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                resp = await client.get(
-                    f"{LLM_MANAGER_URL}/api/runners",
-                )
-                resp.raise_for_status()
-                all_runners = resp.json()
-
-                # Look up our app's allowed runners
-                apps_resp = await client.get(
-                    f"{LLM_MANAGER_URL}/api/apps",
-                )
-                apps_resp.raise_for_status()
-                for a in apps_resp.json():
-                    if a.get("name") == "ecdysis":
-                        ids = a.get("allowed_runner_ids", [])
-                        if ids:
-                            allowed_ids = set(ids)
-                        break
-        except Exception:
-            pass  # If we can't filter, show all runners
-
-        runner_statuses = data.get("runners", [])
-        if allowed_ids:
-            runner_statuses = [r for r in runner_statuses if r.get("runner_id") in allowed_ids]
-
         total_vram = 0.0
         used_vram = 0.0
         runners_info = []
-        for r in runner_statuses:
+        for r in data.get("runners", []):
             rv_total = r.get("gpu_vram_total_gb", 0)
             rv_used = r.get("gpu_vram_used_gb", 0)
             total_vram += rv_total
