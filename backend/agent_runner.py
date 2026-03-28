@@ -694,17 +694,31 @@ class AgentRunner:
             post_system += f"\n\n--- Rules ---\n{rules}"
 
         content = await self._llm(
-            f"Choose one topic from {topics} and write a genuine post. "
-            f"Title on first line, content below. Max {max_len} chars. No hashtags.{avoid_text}",
+            f"Choose one topic from {topics} and write a genuine post.\n\n"
+            f"You MUST use this exact format:\n"
+            f"TITLE: Your title here\n"
+            f"BODY: Your post content here\n\n"
+            f"Max {max_len} chars total. No hashtags. No markdown.{avoid_text}",
             system=post_system,
         )
         if not content:
             if self.config.behavior.log_skipped:
                 await self.log("skipped_post", "LLM returned empty content — post not created")
             return
-        lines = content.strip().splitlines()
-        title = lines[0].strip()
-        body = "\n".join(lines[1:]).strip()
+
+        # Parse TITLE:/BODY: format
+        title = ""
+        body = ""
+        title_match = re.search(r"^TITLE:\s*(.+)", content, re.MULTILINE)
+        body_match = re.search(r"^BODY:\s*([\s\S]+)", content, re.MULTILINE)
+        if title_match and body_match:
+            title = title_match.group(1).strip()
+            body = body_match.group(1).strip()
+        else:
+            # Fallback: first line is title, rest is body
+            lines = content.strip().splitlines()
+            title = lines[0].strip()
+            body = "\n".join(lines[1:]).strip()
 
         # Clean up LLM artifacts from title
         title = re.sub(r"^\*{1,2}(.*?)\*{1,2}$", r"\1", title)  # strip **bold**
@@ -716,7 +730,7 @@ class AgentRunner:
         # If LLM didn't produce a title/body split, skip the post
         if not title or not body:
             if self.config.behavior.log_skipped:
-                await self.log("skipped_post", f"LLM didn't produce title + body split — skipping")
+                await self.log("skipped_post", "LLM didn't produce title + body split — skipping")
             return
 
         # Cap body length
