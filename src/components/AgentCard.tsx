@@ -19,6 +19,7 @@ const ACTION_COLORS: Record<string, string> = {
   manual_post: 'text-purple-400',
   peer_interact: 'text-violet-400',
   thread_reply: 'text-sky-400',
+  rate_limited: 'text-orange-400',
 }
 
 function ActivityRow({ entry }: { entry: ActivityEntry }) {
@@ -40,7 +41,9 @@ export function AgentCard({ agent }: Props) {
   const interactPeers = useInteractWithPeers()
   const activity = useAgentActivity(agent.slot, expanded)
 
-  const statusColor = agent.enabled ? 'bg-green-400' : 'bg-gray-600'
+  const rateLimitedUntil = agent.state.rate_limited_until ? new Date(agent.state.rate_limited_until) : null
+  const isRateLimited = rateLimitedUntil && rateLimitedUntil > new Date()
+  const statusColor = isRateLimited ? 'bg-orange-400' : agent.enabled ? 'bg-green-400' : 'bg-gray-600'
   const lastBeat = agent.state.last_heartbeat
     ? new Date(agent.state.last_heartbeat).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : 'Never'
@@ -92,6 +95,11 @@ export function AgentCard({ agent }: Props) {
             {agent.registered && agent.claimed && !agent.enabled && (
               <span className="text-xs bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded">
                 Disabled
+              </span>
+            )}
+            {isRateLimited && (
+              <span className="text-xs bg-orange-900 text-orange-300 px-1.5 py-0.5 rounded" title={`Until ${rateLimitedUntil!.toLocaleString()}`}>
+                Rate limited — {rateLimitedUntil!.toLocaleDateString([], { month: 'short', day: 'numeric' })} {rateLimitedUntil!.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
             {!agent.has_recent_error && agent.behavior.invalid_submolts && agent.behavior.invalid_submolts.length > 0 && (

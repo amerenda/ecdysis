@@ -65,6 +65,7 @@ export interface AgentState {
   last_post_time: number
   next_post_time: number
   pending_dm_requests: string[]
+  rate_limited_until: string | null
 }
 
 export interface Agent {

@@ -191,6 +191,15 @@ async def init_db(pool: asyncpg.Pool) -> None:
         except asyncpg.DuplicateColumnError:
             pass
 
+        # Migration: add rate_limited_until to moltbook_state
+        try:
+            await conn.execute(
+                "ALTER TABLE moltbook_state ADD COLUMN rate_limited_until TIMESTAMPTZ"
+            )
+            logger.info("Added column moltbook_state.rate_limited_until")
+        except asyncpg.DuplicateColumnError:
+            pass
+
         # Migration: add reply limit columns
         for col, default in [("max_replies_per_heartbeat", 2), ("max_comments_per_post", 3)]:
             try:
@@ -352,6 +361,7 @@ def _default_state_dict(slot: int) -> dict:
         "last_post_time": 0.0,
         "next_post_time": 0.0,
         "pending_dm_requests": [],
+        "rate_limited_until": None,
     }
 
 

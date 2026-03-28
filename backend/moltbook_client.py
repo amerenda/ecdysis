@@ -3,9 +3,18 @@
 import asyncio
 import logging
 import httpx
+from datetime import datetime, timezone
 
 API_BASE = "https://www.moltbook.com/api/v1"
 logger = logging.getLogger(__name__)
+
+
+class RateLimitedError(Exception):
+    """Raised when Moltbook returns 429."""
+    def __init__(self, reset_at: datetime, retry_after: int):
+        self.reset_at = reset_at
+        self.retry_after = retry_after
+        super().__init__(f"Rate limited until {reset_at.isoformat()} ({retry_after}s)")
 
 MAX_RETRIES = 3
 RETRY_BACKOFF = [2, 5, 10]  # seconds
@@ -33,8 +42,21 @@ class MoltbookClient:
                 await asyncio.sleep(wait)
         return last_response
 
+    def _check_rate_limit(self, r: httpx.Response) -> None:
+        if r.status_code == 429:
+            try:
+                body = r.json()
+                reset_at_str = body.get("reset_at", "")
+                retry_after = body.get("retry_after_seconds", 3600)
+                reset_at = datetime.fromisoformat(reset_at_str.replace("Z", "+00:00")) if reset_at_str else datetime.now(timezone.utc)
+            except Exception:
+                reset_at = datetime.now(timezone.utc)
+                retry_after = 3600
+            raise RateLimitedError(reset_at, retry_after)
+
     async def _get(self, path: str, params: dict = None) -> dict:
         r = await self._request_with_retry("get", path, params=params)
+        self._check_rate_limit(r)
         if r.status_code >= 400:
             body = r.text[:500]
             logger.error("Moltbook API error %d on GET %s: %s", r.status_code, path, body)
@@ -43,6 +65,7 @@ class MoltbookClient:
 
     async def _post(self, path: str, data: dict = None) -> dict:
         r = await self._request_with_retry("post", path, json=data or {})
+        self._check_rate_limit(r)
         if r.status_code >= 400:
             body = r.text[:500]
             logger.error("Moltbook API error %d on POST %s: %s", r.status_code, path, body)

@@ -64,6 +64,7 @@ class AgentState(BaseModel):
     last_post_time: float = 0
     next_post_time: float = 0
     pending_dm_requests: list[str] = []
+    rate_limited_until: Optional[Union[datetime, str]] = None
 
 
 class PeerPost(BaseModel):
@@ -142,6 +143,9 @@ def state_from_db(row: dict) -> AgentState:
     if last_hb is not None and not isinstance(last_hb, str):
         # asyncpg returns datetime objects for TIMESTAMPTZ
         last_hb = last_hb.isoformat()
+    rate_limited = row.get("rate_limited_until")
+    if rate_limited is not None and not isinstance(rate_limited, str):
+        rate_limited = rate_limited.isoformat()
     return AgentState(
         slot=row["slot"],
         karma=row.get("karma", 0),
@@ -149,4 +153,5 @@ def state_from_db(row: dict) -> AgentState:
         last_post_time=float(row.get("last_post_time", 0)),
         next_post_time=float(row.get("next_post_time", 0)),
         pending_dm_requests=row.get("pending_dm_requests", []),
+        rate_limited_until=rate_limited,
     )

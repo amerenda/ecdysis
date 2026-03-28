@@ -14,7 +14,7 @@ from config import (
     AgentConfig, AgentState, PeerDatabase, PeerPost,
     config_from_db, state_from_db,
 )
-from moltbook_client import MoltbookClient
+from moltbook_client import MoltbookClient, RateLimitedError
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +216,21 @@ class AgentRunner:
     async def _run_heartbeat_inner(self):
         # Load fresh state from DB each heartbeat
         await self._load_state()
+
+        # Skip if rate limited
+        if self.state.rate_limited_until:
+            rl = self.state.rate_limited_until
+            if isinstance(rl, str):
+                rl = datetime.fromisoformat(rl)
+            if rl > datetime.now(timezone.utc):
+                remaining = int((rl - datetime.now(timezone.utc)).total_seconds() / 60)
+                logger.info("[agent-%d] Rate limited for %dm, skipping heartbeat", self.slot, remaining)
+                return
+            else:
+                # Rate limit expired, clear it
+                self.state.rate_limited_until = None
+                await db.upsert_moltbook_state(self.pool, self.slot, rate_limited_until=None)
+
         hb_md = getattr(self.config, 'heartbeat_md', '') or ''
         detail = "Starting"
         if hb_md:
@@ -261,6 +276,11 @@ class AgentRunner:
             await self._update_memory()
 
             await self.log("heartbeat", f"Done — karma: {self.state.karma}")
+        except RateLimitedError as e:
+            self.state.rate_limited_until = e.reset_at
+            await db.upsert_moltbook_state(self.pool, self.slot, rate_limited_until=e.reset_at)
+            await self.log("rate_limited", f"Rate limited until {e.reset_at.isoformat()} ({e.retry_after}s)")
+            logger.warning("Agent %d rate limited until %s", self.slot, e.reset_at)
         except httpx.HTTPStatusError as e:
             body = e.response.text[:300] if e.response else ""
             detail = f"{e.response.status_code} {e.response.reason_phrase} on {e.request.url.path} — {body}"
