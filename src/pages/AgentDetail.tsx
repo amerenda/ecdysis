@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   ArrowLeft, Play, Square, Zap, Users, Loader2, Settings, RefreshCw,
-  FileText, Upload, Key, Eye, EyeOff, Save, HelpCircle, ExternalLink, Filter,
+  FileText, Upload, Key, Eye, EyeOff, Save, HelpCircle, ExternalLink, Filter, Download,
 } from 'lucide-react'
 import {
   useAgents, useAgentActivity, useAgentPosts, useModels,
@@ -732,6 +732,31 @@ export function AgentDetail() {
                 Enable
               </button>
             )}
+            <button onClick={() => {
+              const backup = {
+                slot: agent.slot,
+                persona: agent.persona,
+                schedule: agent.schedule,
+                behavior: agent.behavior,
+                model: agent.model,
+                soul_md: agent.soul_md,
+                heartbeat_md: agent.heartbeat_md,
+                messaging_md: agent.messaging_md,
+                rules_md: agent.rules_md,
+                memory_md: agent.memory_md,
+              }
+              const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `${agent.persona.name}-backup-${new Date().toISOString().slice(0, 10)}.json`
+              a.click()
+              URL.revokeObjectURL(url)
+            }}
+              title="Backup agent config"
+              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors">
+              <Download className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>
