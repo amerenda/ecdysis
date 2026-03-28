@@ -22,13 +22,13 @@ jobs:
       - run: npm install
       - run: npm run build
 
-  build-and-deploy:
-    needs: test
+  set-tag:
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, mac-mini]
+    runs-on: arc-runner-set
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      pr_prefix: ${{ steps.tag.outputs.pr_prefix }}
     steps:
-      - uses: actions/checkout@v6
-
       - name: Set image tag
         id: tag
         run: |
@@ -41,29 +41,79 @@ jobs:
             echo "pr_prefix=deploy" >> "$GITHUB_OUTPUT"
           fi
 
+  build-amd64:
+    needs: [test, set-tag]
+    if: github.event_name != 'pull_request'
+    runs-on: arc-runner-set
+    steps:
+      - uses: actions/checkout@v6
+
       - name: Login to Docker Hub
         run: echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
 
-      - name: Build and push frontend
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
+      - name: Build and push frontend (amd64)
         run: |
-          docker build -t "amerenda/ecdysis-frontend:${TAG}" -t "amerenda/ecdysis-frontend:latest" .
-          docker push "amerenda/ecdysis-frontend:${TAG}"
-          docker push "amerenda/ecdysis-frontend:latest"
+          docker build -t "amerenda/ecdysis-frontend:${{ needs.set-tag.outputs.tag }}-amd64" .
+          docker push "amerenda/ecdysis-frontend:${{ needs.set-tag.outputs.tag }}-amd64"
 
-      - name: Build and push backend
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
+      - name: Build and push backend (amd64)
         run: |
-          docker build -t "amerenda/ecdysis-backend:${TAG}" -t "amerenda/ecdysis-backend:latest" -f backend/Dockerfile backend
-          docker push "amerenda/ecdysis-backend:${TAG}"
-          docker push "amerenda/ecdysis-backend:latest"
+          docker build -t "amerenda/ecdysis-backend:${{ needs.set-tag.outputs.tag }}-amd64" -f backend/Dockerfile backend
+          docker push "amerenda/ecdysis-backend:${{ needs.set-tag.outputs.tag }}-amd64"
+
+  build-arm64:
+    needs: [test, set-tag]
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, mac-mini]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Login to Docker Hub
+        run: echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+
+      - name: Build and push frontend (arm64)
+        run: |
+          docker build -t "amerenda/ecdysis-frontend:${{ needs.set-tag.outputs.tag }}-arm64" .
+          docker push "amerenda/ecdysis-frontend:${{ needs.set-tag.outputs.tag }}-arm64"
+
+      - name: Build and push backend (arm64)
+        run: |
+          docker build -t "amerenda/ecdysis-backend:${{ needs.set-tag.outputs.tag }}-arm64" -f backend/Dockerfile backend
+          docker push "amerenda/ecdysis-backend:${{ needs.set-tag.outputs.tag }}-arm64"
+
+  manifest:
+    needs: [set-tag, build-amd64, build-arm64]
+    runs-on: arc-runner-set
+    steps:
+      - name: Login to Docker Hub
+        run: echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+
+      - name: Create multi-arch manifests
+        env:
+          TAG: ${{ needs.set-tag.outputs.tag }}
+        run: |
+          for IMAGE in ecdysis-frontend ecdysis-backend; do
+            # Tagged manifest
+            docker buildx imagetools create -t "amerenda/${IMAGE}:${TAG}" \
+              "amerenda/${IMAGE}:${TAG}-amd64" \
+              "amerenda/${IMAGE}:${TAG}-arm64"
+
+            # Latest manifest
+            docker buildx imagetools create -t "amerenda/${IMAGE}:latest" \
+              "amerenda/${IMAGE}:${TAG}-amd64" \
+              "amerenda/${IMAGE}:${TAG}-arm64"
+          done
+
+  deploy:
+    needs: [set-tag, manifest]
+    runs-on: arc-runner-set
+    steps:
+      - uses: actions/checkout@v6
 
       - name: Create deploy PR (UAT + prod)
         env:
-          TAG: ${{ steps.tag.outputs.tag }}
-          PREFIX: ${{ steps.tag.outputs.pr_prefix }}
+          TAG: ${{ needs.set-tag.outputs.tag }}
+          PREFIX: ${{ needs.set-tag.outputs.pr_prefix }}
         run: |
           rm -rf /tmp/gitops
           git clone https://x-access-token:${GITOPS_PAT}@github.com/${GITOPS_REPO}.git /tmp/gitops
@@ -114,7 +164,7 @@ jobs:
           if [ -n "${COMMIT_BODY}" ]; then
             PR_BODY="${PR_BODY}${NL}${NL}${COMMIT_BODY}"
           fi
-          PR_BODY="${PR_BODY}${NL}${NL}Images: \`amerenda/ecdysis-frontend:${TAG}\`, \`amerenda/ecdysis-backend:${TAG}\`${NL}Source: https://github.com/amerenda/ecdysis/commit/${GITHUB_SHA}"
+          PR_BODY="${PR_BODY}${NL}${NL}Images: \`amerenda/ecdysis-frontend:${TAG}\`, \`amerenda/ecdysis-backend:${TAG}\` (multi-arch: amd64+arm64)${NL}Source: https://github.com/amerenda/ecdysis/commit/${GITHUB_SHA}"
 
           PR_RESPONSE=$(curl -s -X POST \
             -H "Authorization: token ${GITOPS_PAT}" \
@@ -143,7 +193,7 @@ jobs:
 
   notify-failure:
     if: failure()
-    needs: [test, build-and-deploy]
+    needs: [test, build-amd64, build-arm64, manifest, deploy]
     runs-on: ubuntu-latest
     steps:
       - name: Create GitHub Issue for build failure
