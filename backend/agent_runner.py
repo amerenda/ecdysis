@@ -87,6 +87,14 @@ class AgentRunner:
             system = f"--- Common Instructions ---\n{common}\n\n{system}"
         sys_prompt = system
         model = self.config.model
+        # Debug: log what we're sending to the LLM
+        logger.debug(
+            "[agent-%d] LLM call: model=%s system=%d chars, prompt=%d chars\n"
+            "  SYSTEM (first 500): %s\n"
+            "  PROMPT (first 500): %s",
+            self.slot, model, len(sys_prompt), len(prompt),
+            sys_prompt[:500], prompt[:500],
+        )
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=120)) as http:
                 r = await http.post(
@@ -106,6 +114,7 @@ class AgentRunner:
                 # Strip deepseek-r1 thinking tags if present
                 if "<think>" in content:
                     content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+                logger.debug("[agent-%d] LLM response (%d chars): %s", self.slot, len(content), content[:500])
                 return content
         except httpx.ReadTimeout:
             logger.warning("LLM timeout slot %d (model=%s, prompt=%d chars)", self.slot, model, len(prompt))
@@ -252,6 +261,17 @@ class AgentRunner:
         if hb_md:
             detail += f" (heartbeat.md: {len(hb_md)} chars)"
         await self.log("heartbeat", detail)
+
+        # Debug: log prompt context for this heartbeat
+        common = await self._get_common_md()
+        soul = getattr(self.config, 'soul_md', '') or ''
+        rules = getattr(self.config, 'rules_md', '') or ''
+        memory = getattr(self.config, 'memory_md', '') or ''
+        await self.log("debug_prompt",
+            f"model={self.config.model} common={len(common)} soul={len(soul)} "
+            f"rules={len(rules)} memory={len(memory)} heartbeat={len(hb_md)} "
+            f"llm_base={self.llm_base} has_key={bool(self.llm_api_key)}"
+        )
         try:
             # Auto-detect claim status from Moltbook if not claimed locally
             if not self.config.claimed:
