@@ -57,7 +57,8 @@ export function Prompts() {
         <div>
           <h2 className="text-lg font-semibold text-gray-100">Recent Prompts</h2>
           <p className="text-sm text-gray-500 mt-0.5">
-            In-memory only — lost on pod restart. Last {prompts.data?.length ?? 0} calls.
+            In-memory only — lost on pod restart.
+            {prompts.data && <> {prompts.data.entries.length} calls from <span className="text-gray-400">{prompts.data.pod}</span></>}
           </p>
         </div>
         <select
@@ -76,12 +77,12 @@ export function Prompts() {
         <p className="text-sm text-gray-600 text-center py-8">Loading...</p>
       )}
 
-      {prompts.data && prompts.data.length === 0 && (
+      {prompts.data && prompts.data.entries.length === 0 && (
         <p className="text-sm text-gray-600 text-center py-8">No prompts recorded yet. Prompts appear after agents run heartbeats.</p>
       )}
 
       <div className="space-y-2">
-        {prompts.data?.map((entry, i) => (
+        {prompts.data?.entries.map((entry, i) => (
           <PromptEntry key={`${entry.timestamp}-${i}`} entry={entry} />
         ))}
       </div>

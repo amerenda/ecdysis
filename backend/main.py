@@ -323,7 +323,9 @@ async def get_prompts(slot: Optional[int] = None):
     log = get_prompt_log()
     if slot is not None:
         log = [e for e in log if e["slot"] == slot]
-    return list(reversed(log))  # newest first
+    # Add pod name so frontend knows which pod served this
+    result = list(reversed(log))
+    return {"pod": NODE, "entries": result}
 
 
 # ── Moltbook agent config ────────────────────────────────────────────────────

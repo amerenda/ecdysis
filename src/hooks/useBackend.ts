@@ -239,12 +239,17 @@ export interface PromptLogEntry {
   timestamp: string
 }
 
+export interface PromptLogResponse {
+  pod: string
+  entries: PromptLogEntry[]
+}
+
 export function usePromptLog(slot?: number) {
   const params = slot !== undefined ? `?slot=${slot}` : ''
-  return useQuery<PromptLogEntry[]>({
+  return useQuery<PromptLogResponse>({
     queryKey: ['prompt-log', slot],
     queryFn: () => get(`/api/prompts${params}`),
-    refetchInterval: 10_000,
+    refetchInterval: 15_000,
   })
 }
 

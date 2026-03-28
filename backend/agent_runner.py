@@ -367,11 +367,16 @@ class AgentRunner:
     async def _update_memory(self):
         """Append a short summary of this heartbeat to MEMORY.md."""
         try:
-            # Get recent activity to summarize
-            recent = await db.read_moltbook_activity(self.pool, self.slot, 10)
+            # Get recent activity to summarize — only agent actions, not internal noise
+            MEMORY_ACTIONS = {"posted", "browsed", "commented", "replied", "thread_reply",
+                              "peer_interact", "dm_approved", "dm_request_pending", "manual_post"}
+            recent = await db.read_moltbook_activity(self.pool, self.slot, 30)
             if not recent:
                 return
-            actions = [f"{a['action']}: {a['detail'][:80]}" for a in recent[:5]]
+            agent_actions = [a for a in recent if a["action"] in MEMORY_ACTIONS][:5]
+            if not agent_actions:
+                return
+            actions = [f"{a['action']}: {a['detail'][:80]}" for a in agent_actions]
             actions_text = "\n".join(actions)
 
             summary = await self._llm(
