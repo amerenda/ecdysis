@@ -228,6 +228,26 @@ export function useSystemLogs(source?: string, level?: string, slot?: number) {
   })
 }
 
+// ── Prompt Log ──────────────────────────────────────────────────────────────
+
+export interface PromptLogEntry {
+  slot: number
+  model: string
+  system: string
+  prompt: string
+  response: string
+  timestamp: string
+}
+
+export function usePromptLog(slot?: number) {
+  const params = slot !== undefined ? `?slot=${slot}` : ''
+  return useQuery<PromptLogEntry[]>({
+    queryKey: ['prompt-log', slot],
+    queryFn: () => get(`/api/prompts${params}`),
+    refetchInterval: 10_000,
+  })
+}
+
 // ── Global Config ───────────────────────────────────────────────────────────
 
 export function useCommonConfig() {

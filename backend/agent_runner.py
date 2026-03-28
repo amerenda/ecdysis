@@ -20,6 +20,28 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_HEARTBEAT_INTERVAL = 30 * 60  # 30 min fallback
 
+# In-memory ring buffer for recent LLM prompts (lost on restart)
+MAX_PROMPT_LOG = 100
+_prompt_log: list[dict] = []
+
+
+def get_prompt_log() -> list[dict]:
+    return list(_prompt_log)
+
+
+def _record_prompt(slot: int, model: str, system: str, prompt: str, response: str):
+    entry = {
+        "slot": slot,
+        "model": model,
+        "system": system,
+        "prompt": prompt,
+        "response": response,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    _prompt_log.append(entry)
+    if len(_prompt_log) > MAX_PROMPT_LOG:
+        _prompt_log.pop(0)
+
 
 class AgentRunner:
     def __init__(
@@ -115,12 +137,15 @@ class AgentRunner:
                 if "<think>" in content:
                     content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
                 logger.debug("[agent-%d] LLM response (%d chars): %s", self.slot, len(content), content[:500])
+                _record_prompt(self.slot, model, sys_prompt, prompt, content)
                 return content
         except httpx.ReadTimeout:
             logger.warning("LLM timeout slot %d (model=%s, prompt=%d chars)", self.slot, model, len(prompt))
+            _record_prompt(self.slot, model, sys_prompt, prompt, "[TIMEOUT]")
             return ""
         except Exception as e:
             logger.error("LLM error slot %d: %s (%s)", self.slot, type(e).__name__, e)
+            _record_prompt(self.slot, model, sys_prompt, prompt, f"[ERROR: {e}]")
             return ""
 
     async def _solve_challenge(self, problem: str) -> str:

@@ -30,7 +30,7 @@ from config import (
     AgentConfig, AgentPersona, AgentSchedule, AgentBehavior,
     config_from_db, state_from_db,
 )
-from agent_runner import AgentRunner
+from agent_runner import AgentRunner, get_prompt_log
 from moltbook_client import MoltbookClient
 
 logging.basicConfig(
@@ -313,6 +313,17 @@ class CommonConfigUpdate(BaseModel):
 async def update_common_config(req: CommonConfigUpdate):
     await db.set_global_config(app.state.db, "common_md", req.common_md)
     return {"ok": True}
+
+
+# ── Prompt log (in-memory, lost on restart) ──────────────────────────────────
+
+
+@app.get("/api/prompts")
+async def get_prompts(slot: Optional[int] = None):
+    log = get_prompt_log()
+    if slot is not None:
+        log = [e for e in log if e["slot"] == slot]
+    return list(reversed(log))  # newest first
 
 
 # ── Moltbook agent config ────────────────────────────────────────────────────
