@@ -41,33 +41,24 @@ jobs:
             echo "pr_prefix=deploy" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-
       - name: Login to Docker Hub
         run: echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
 
       - name: Build and push frontend
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          no-cache: true
-          tags: |
-            amerenda/ecdysis-frontend:${{ steps.tag.outputs.tag }}
-            amerenda/ecdysis-frontend:latest
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          docker build -t "amerenda/ecdysis-frontend:${TAG}" -t "amerenda/ecdysis-frontend:latest" .
+          docker push "amerenda/ecdysis-frontend:${TAG}"
+          docker push "amerenda/ecdysis-frontend:latest"
 
       - name: Build and push backend
-        uses: docker/build-push-action@v6
-        with:
-          context: backend
-          file: backend/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            amerenda/ecdysis-backend:${{ steps.tag.outputs.tag }}
-            amerenda/ecdysis-backend:latest
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          docker build -t "amerenda/ecdysis-backend:${TAG}" -t "amerenda/ecdysis-backend:latest" -f backend/Dockerfile backend
+          docker push "amerenda/ecdysis-backend:${TAG}"
+          docker push "amerenda/ecdysis-backend:latest"
 
       - name: Create deploy PR (UAT + prod)
         env:
