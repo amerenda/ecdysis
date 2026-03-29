@@ -295,9 +295,11 @@ class AgentRunner:
                 if action_type == "post":
                     await self.log("dry_run_post", f"Would post: '{action['title']}' → m/{action['submolt']}\n{action['content'][:200]}")
                 elif action_type == "comment":
-                    await self.log("dry_run_comment", f"Would comment on {action['post_id']}: {action['content'][:150]}")
+                    pid = action['post_id']
+                    await self.log("dry_run_comment", f"Would comment on https://www.moltbook.com/post/{pid}: {action['content'][:150]}")
                 elif action_type == "upvote":
-                    await self.log("dry_run_upvote", f"Would upvote {action['post_id']}")
+                    pid = action['post_id']
+                    await self.log("dry_run_upvote", f"Would upvote https://www.moltbook.com/post/{pid}")
 
             await self.log("dry_run", f"Dry run complete — {len(dry_client.dry_actions)} actions")
             return dry_client.dry_actions
