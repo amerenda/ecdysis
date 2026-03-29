@@ -186,6 +186,47 @@ class MoltbookClient:
 
     # ── Registration (one-time) ─────────────────────────────────────────────
 
+    # ── Dry run subclass ───────────────────────────────────────────────────
+
+
+class DryRunMoltbookClient(MoltbookClient):
+    """Wraps MoltbookClient — reads are real, writes are intercepted."""
+
+    def __init__(self, api_key: str, karma: int = 0):
+        super().__init__(api_key)
+        self.dry_actions: list[dict] = []
+        self._karma = karma
+
+    async def home(self) -> dict:
+        return {"your_account": {"karma": self._karma}, "activity_on_your_posts": []}
+
+    async def dm_check(self) -> dict:
+        return {"has_activity": False}
+
+    async def create_post(self, submolt: str, title: str, content: str, challenge_answer: dict = None) -> dict:
+        self.dry_actions.append({"type": "post", "submolt": submolt, "title": title, "content": content})
+        return {"id": "dry-run-post"}
+
+    async def create_comment(self, post_id: str, content: str, parent_id: str = None, challenge_answer: dict = None) -> dict:
+        self.dry_actions.append({"type": "comment", "post_id": post_id, "content": content, "parent_id": parent_id})
+        return {"id": "dry-run-comment"}
+
+    async def upvote_post(self, post_id: str) -> dict:
+        self.dry_actions.append({"type": "upvote", "post_id": post_id})
+        return {}
+
+    async def upvote_comment(self, comment_id: str) -> dict:
+        self.dry_actions.append({"type": "upvote_comment", "comment_id": comment_id})
+        return {}
+
+    async def dm_approve(self, conv_id: str) -> dict:
+        self.dry_actions.append({"type": "dm_approve", "conversation_id": conv_id})
+        return {}
+
+    async def mark_notifications_read(self, post_id: str) -> dict:
+        return {}
+
+
     @staticmethod
     async def register(name: str, description: str) -> dict:
         async with httpx.AsyncClient(timeout=30) as client:

@@ -7,9 +7,10 @@ import {
 import {
   useAgents, useAgentActivity, useAgentPosts, useModels,
   useStartAgent, useStopAgent,
-  useTriggerHeartbeat, useInteractWithPeers,
+  useTriggerHeartbeat, useDryRunHeartbeat, useInteractWithPeers,
   useUpdateAgent, useClaimStatus, useCompactMemory,
 } from '../hooks/useBackend'
+import type { DryRunAction } from '../hooks/useBackend'
 import type { Agent, ActivityEntry } from '../types'
 
 // ── Tooltip ──────────────────────────────────────────────────────────────────
@@ -58,6 +59,10 @@ const ACTION_COLORS: Record<string, string> = {
   skipped_thread: 'text-gray-600',
   skipped_post: 'text-gray-600',
   skipped_peer_comment: 'text-gray-600',
+  dry_run: 'text-purple-400',
+  dry_run_post: 'text-purple-400',
+  dry_run_comment: 'text-purple-400',
+  dry_run_upvote: 'text-purple-400',
 }
 
 const SKIPPED_ACTIONS = new Set(['skipped_reply', 'skipped_comment', 'skipped_thread', 'skipped_post', 'skipped_peer_comment'])
@@ -653,12 +658,14 @@ export function AgentDetail() {
   const start = useStartAgent()
   const stop = useStopAgent()
   const heartbeat = useTriggerHeartbeat()
+  const dryRun = useDryRunHeartbeat()
   const interactPeers = useInteractWithPeers()
 
   const [tab, setTab] = useState<'activity' | 'config' | 'files' | 'posts'>('activity')
   const [activityFilter, setActivityFilter] = useState<'all' | 'actions' | 'skipped'>('all')
   const [showClaim, setShowClaim] = useState(false)
   const [dismissedErrorTs, setDismissedErrorTs] = useState<string | null>(null)
+  const [dryRunResults, setDryRunResults] = useState<DryRunAction[] | null>(null)
 
   const agent = agents.data?.find((a: Agent) => a.slot === slotNum)
 
@@ -732,6 +739,18 @@ export function AgentDetail() {
                 Enable
               </button>
             )}
+            {agent.registered && (
+              <button onClick={async () => {
+                setDryRunResults(null)
+                const result = await dryRun.mutateAsync(agent.slot)
+                setDryRunResults(result.actions)
+              }} disabled={dryRun.isPending}
+                title="Dry run — test without posting"
+                className="flex items-center gap-1.5 bg-purple-900/50 hover:bg-purple-800/50 text-purple-400 text-sm px-3 py-1.5 rounded-lg transition-colors disabled:opacity-30">
+                {dryRun.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                Dry Run
+              </button>
+            )}
             <button onClick={() => {
               const backup = {
                 slot: agent.slot,
@@ -760,6 +779,41 @@ export function AgentDetail() {
           </div>
         </div>
       </div>
+
+      {/* Dry run results */}
+      {dryRunResults && (
+        <div className="bg-purple-950/30 border border-purple-800 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium text-purple-300">Dry Run Results — {dryRunResults.length} action{dryRunResults.length !== 1 ? 's' : ''}</p>
+            <button onClick={() => setDryRunResults(null)} className="text-xs text-purple-400 hover:text-purple-300">Dismiss</button>
+          </div>
+          {dryRunResults.length === 0 && (
+            <p className="text-xs text-purple-400">No actions — agent had nothing to do this cycle.</p>
+          )}
+          <div className="space-y-2">
+            {dryRunResults.map((action, i) => (
+              <div key={i} className="bg-purple-900/30 rounded-lg p-3">
+                {action.type === 'post' && (
+                  <>
+                    <p className="text-xs text-purple-400 mb-1">Would post to m/{action.submolt}</p>
+                    <p className="text-sm font-medium text-purple-200">{action.title}</p>
+                    <p className="text-xs text-purple-300 mt-1">{action.content?.slice(0, 300)}</p>
+                  </>
+                )}
+                {action.type === 'comment' && (
+                  <>
+                    <p className="text-xs text-purple-400 mb-1">Would comment on {action.post_id?.slice(0, 8)}</p>
+                    <p className="text-sm text-purple-200">{action.content}</p>
+                  </>
+                )}
+                {action.type === 'upvote' && (
+                  <p className="text-xs text-purple-400">Would upvote {action.post_id?.slice(0, 8)}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Stats + links */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">

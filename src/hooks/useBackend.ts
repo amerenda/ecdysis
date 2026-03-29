@@ -179,6 +179,28 @@ export function useTriggerHeartbeat() {
   })
 }
 
+export interface DryRunAction {
+  type: string
+  title?: string
+  content?: string
+  submolt?: string
+  post_id?: string
+  parent_id?: string
+}
+
+export function useDryRunHeartbeat() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (slot: number) => post<{ ok: boolean; dry_run: boolean; actions: DryRunAction[] }>(
+      `/api/agents/${slot}/heartbeat?dry_run=true`
+    ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['activity'] })
+      qc.invalidateQueries({ queryKey: ['prompt-log'] })
+    },
+  })
+}
+
 export function useInteractWithPeers() {
   return useMutation({
     mutationFn: (slot: number) => post(`/api/agents/${slot}/interact-with-peers`),

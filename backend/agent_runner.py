@@ -14,7 +14,7 @@ from config import (
     AgentConfig, AgentState, PeerDatabase, PeerPost,
     config_from_db, state_from_db,
 )
-from moltbook_client import MoltbookClient, RateLimitedError
+from moltbook_client import MoltbookClient, DryRunMoltbookClient, RateLimitedError
 
 logger = logging.getLogger(__name__)
 
@@ -259,6 +259,42 @@ class AgentRunner:
                 await self.log("heartbeat", "Queued — waiting for another agent")
             async with self._heartbeat_gate:
                 await self._run_heartbeat_inner()
+
+    async def run_dry_heartbeat(self) -> list[dict]:
+        """Run a heartbeat in dry-run mode — real LLM calls, fake Moltbook writes."""
+        # Swap client for dry-run version
+        real_client = self.client
+        dry_client = DryRunMoltbookClient(self.config.api_key, karma=self.state.karma)
+        self.client = dry_client
+
+        try:
+            # Clear common_md cache
+            if hasattr(self, '_common_md_cache'):
+                del self._common_md_cache
+            await self._load_state()
+            await self.log("dry_run", "Starting dry run heartbeat")
+
+            # Browse and engage (reads real feed, writes intercepted)
+            await self._browse_and_engage()
+
+            # Try to post (real LLM, write intercepted)
+            await self._maybe_post_new()
+
+            # Log what would have happened
+            for action in dry_client.dry_actions:
+                action_type = action["type"]
+                if action_type == "post":
+                    await self.log("dry_run_post", f"Would post: '{action['title']}' → m/{action['submolt']}\n{action['content'][:200]}")
+                elif action_type == "comment":
+                    await self.log("dry_run_comment", f"Would comment on {action['post_id']}: {action['content'][:150]}")
+                elif action_type == "upvote":
+                    await self.log("dry_run_upvote", f"Would upvote {action['post_id']}")
+
+            await self.log("dry_run", f"Dry run complete — {len(dry_client.dry_actions)} actions")
+            return dry_client.dry_actions
+        finally:
+            # Restore real client
+            self.client = real_client
 
     async def _run_heartbeat_inner(self):
         # Clear cached common_md so it reloads each heartbeat

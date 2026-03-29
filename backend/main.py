@@ -561,8 +561,11 @@ async def _ensure_runner(slot: int) -> AgentRunner:
 
 
 @app.post("/api/agents/{slot}/heartbeat")
-async def trigger_moltbook_heartbeat(slot: int):
+async def trigger_moltbook_heartbeat(slot: int, dry_run: bool = False):
     r = await _ensure_runner(slot)
+    if dry_run:
+        actions = await r.run_dry_heartbeat()
+        return {"ok": True, "dry_run": True, "actions": actions}
     if r._heartbeat_lock.locked():
         return {"ok": True, "message": "Heartbeat already in progress"}
     asyncio.create_task(r.run_heartbeat())
