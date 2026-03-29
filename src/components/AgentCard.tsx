@@ -97,6 +97,11 @@ export function AgentCard({ agent }: Props) {
                 Disabled
               </span>
             )}
+            {agent.dry_run_mode && (
+              <span className="text-xs bg-purple-900 text-purple-300 px-1.5 py-0.5 rounded">
+                Dry Run
+              </span>
+            )}
             {isRateLimited && (
               <span className="text-xs bg-orange-900 text-orange-300 px-1.5 py-0.5 rounded" title={`Until ${rateLimitedUntil!.toLocaleString()}`}>
                 Rate limited — {rateLimitedUntil!.toLocaleDateString([], { month: 'short', day: 'numeric' })} {rateLimitedUntil!.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

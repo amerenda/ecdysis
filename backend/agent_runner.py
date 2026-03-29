@@ -66,6 +66,8 @@ class AgentRunner:
         self._heartbeat_lock = asyncio.Lock()
         self._heartbeat_gate = heartbeat_gate or asyncio.Lock()
         self._lock_conn = lock_conn
+        self._dry_run = False
+        self.dry_run_mode = False  # persistent toggle for heartbeat loop
 
     async def log(self, action: str, detail: str):
         await db.append_moltbook_activity(self.pool, self.slot, action, detail)
@@ -267,17 +269,24 @@ class AgentRunner:
         dry_client = DryRunMoltbookClient(self.config.api_key, karma=self.state.karma)
         self.client = dry_client
 
+        # Force post timing so _maybe_post_new always triggers
+        saved_next_post = self.state.next_post_time
+        self.state.next_post_time = 0
+        self._dry_run = True
+
         try:
             # Clear common_md cache
             if hasattr(self, '_common_md_cache'):
                 del self._common_md_cache
             await self._load_state()
+            # Re-force after load
+            self.state.next_post_time = 0
             await self.log("dry_run", "Starting dry run heartbeat")
 
             # Browse and engage (reads real feed, writes intercepted)
             await self._browse_and_engage()
 
-            # Try to post (real LLM, write intercepted)
+            # Force a post (real LLM, write intercepted)
             await self._maybe_post_new()
 
             # Log what would have happened
@@ -293,8 +302,10 @@ class AgentRunner:
             await self.log("dry_run", f"Dry run complete — {len(dry_client.dry_actions)} actions")
             return dry_client.dry_actions
         finally:
-            # Restore real client
+            # Restore real client and state
             self.client = real_client
+            self.state.next_post_time = saved_next_post
+            self._dry_run = False
 
     async def _run_heartbeat_inner(self):
         # Clear cached common_md so it reloads each heartbeat
@@ -692,23 +703,24 @@ class AgentRunner:
             interval_secs *= beh.karma_throttle_multiplier
             logger.info("[agent-%d] Karma throttle active", self.slot)
 
-        if self.state.next_post_time == 0 or self.state.next_post_time < 1000000:
-            jitter = 1.0 + random.uniform(-beh.post_jitter_pct / 100, beh.post_jitter_pct / 100)
-            self.state.next_post_time = now + interval_secs * jitter
-            logger.info("[agent-%d] Seeded next_post_time: in %.0fm", self.slot,
-                        (self.state.next_post_time - now) / 60)
-            await self._save_state()
+        if not self._dry_run:
+            if self.state.next_post_time == 0 or self.state.next_post_time < 1000000:
+                jitter = 1.0 + random.uniform(-beh.post_jitter_pct / 100, beh.post_jitter_pct / 100)
+                self.state.next_post_time = now + interval_secs * jitter
+                logger.info("[agent-%d] Seeded next_post_time: in %.0fm", self.slot,
+                            (self.state.next_post_time - now) / 60)
+                await self._save_state()
 
-        if now < self.state.next_post_time:
-            logger.info("[agent-%d] Not time to post yet (%.0fm remaining)", self.slot,
-                        (self.state.next_post_time - now) / 60)
-            return
+            if now < self.state.next_post_time:
+                logger.info("[agent-%d] Not time to post yet (%.0fm remaining)", self.slot,
+                            (self.state.next_post_time - now) / 60)
+                return
 
-        hour = datetime.now().hour
-        if not (sched.active_hours_start <= hour < sched.active_hours_end):
-            logger.info("[agent-%d] Outside active hours (%d not in %d-%d)", self.slot,
-                        hour, sched.active_hours_start, sched.active_hours_end)
-            return
+            hour = datetime.now().hour
+            if not (sched.active_hours_start <= hour < sched.active_hours_end):
+                logger.info("[agent-%d] Outside active hours (%d not in %d-%d)", self.slot,
+                            hour, sched.active_hours_start, sched.active_hours_end)
+                return
 
         logger.info("[agent-%d] Attempting to post...", self.slot)
 
@@ -896,11 +908,12 @@ class AgentRunner:
             result = await self._post_with_challenge(
                 self.client.create_post, submolt=submolt, title=title, content=body
             )
-            self.state.last_post_time = now
-            # Schedule next post with fresh jitter
-            jitter = 1.0 + random.uniform(-beh.post_jitter_pct / 100, beh.post_jitter_pct / 100)
-            self.state.next_post_time = now + interval_secs * jitter
-            await self._save_state()
+            if not self._dry_run:
+                self.state.last_post_time = now
+                # Schedule next post with fresh jitter
+                jitter = 1.0 + random.uniform(-beh.post_jitter_pct / 100, beh.post_jitter_pct / 100)
+                self.state.next_post_time = now + interval_secs * jitter
+                await self._save_state()
             post_id = ""
             if isinstance(result, dict):
                 post_id = result.get("id", "") or result.get("post", {}).get("id", "")
@@ -1013,7 +1026,10 @@ class AgentRunner:
                         continue
 
 
-                await self.run_heartbeat()
+                if self.dry_run_mode:
+                    await self.run_dry_heartbeat()
+                else:
+                    await self.run_heartbeat()
                 base_interval = getattr(self.config.schedule, 'heartbeat_interval_minutes', 30) * 60
                 base_interval = base_interval or DEFAULT_HEARTBEAT_INTERVAL
                 hb_jitter_pct = getattr(self.config.schedule, 'heartbeat_jitter_pct', 20) / 100

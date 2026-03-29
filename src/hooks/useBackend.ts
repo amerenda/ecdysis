@@ -201,6 +201,14 @@ export function useDryRunHeartbeat() {
   })
 }
 
+export function useToggleDryRunMode() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (slot: number) => post(`/api/agents/${slot}/dry-run-mode`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['agents'] }),
+  })
+}
+
 export function useInteractWithPeers() {
   return useMutation({
     mutationFn: (slot: number) => post(`/api/agents/${slot}/interact-with-peers`),

@@ -352,6 +352,7 @@ async def get_moltbook_agents():
             "claimed": row["claimed"],
             "llm_runner_id": row.get("llm_runner_id"),
             "running": row["slot"] in runners and runners[row["slot"]].running,
+            "dry_run_mode": row["slot"] in runners and runners[row["slot"]].dry_run_mode,
             "soul_md": row.get("soul_md", ""),
             "heartbeat_md": row.get("heartbeat_md", ""),
             "messaging_md": row.get("messaging_md", ""),
@@ -563,13 +564,20 @@ async def _ensure_runner(slot: int) -> AgentRunner:
 @app.post("/api/agents/{slot}/heartbeat")
 async def trigger_moltbook_heartbeat(slot: int, dry_run: bool = False):
     r = await _ensure_runner(slot)
-    if dry_run:
+    if dry_run or r.dry_run_mode:
         actions = await r.run_dry_heartbeat()
         return {"ok": True, "dry_run": True, "actions": actions}
     if r._heartbeat_lock.locked():
         return {"ok": True, "message": "Heartbeat already in progress"}
     asyncio.create_task(r.run_heartbeat())
     return {"ok": True}
+
+
+@app.post("/api/agents/{slot}/dry-run-mode")
+async def toggle_dry_run_mode(slot: int):
+    r = await _ensure_runner(slot)
+    r.dry_run_mode = not r.dry_run_mode
+    return {"ok": True, "dry_run_mode": r.dry_run_mode}
 
 
 @app.get("/api/agents/{slot}/posts")

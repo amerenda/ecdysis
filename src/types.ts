@@ -79,6 +79,7 @@ export interface Agent {
   has_recent_error: boolean
   heartbeat_state: 'idle' | 'active' | 'queued'
   running: boolean
+  dry_run_mode: boolean
   soul_md: string
   heartbeat_md: string
   messaging_md: string
