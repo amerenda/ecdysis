@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
-import { Save, Plus, Trash2, Power, Info, AlertTriangle, HelpCircle, FileText, Upload, Key, Eye, EyeOff } from 'lucide-react'
+import { Save, Plus, Trash2, Power, Info, AlertTriangle, HelpCircle, Key, Eye, EyeOff } from 'lucide-react'
 import { useAgents, useModels, useUpdateAgent, useDeleteAgent, useGpu, useRegisterAgent, useSetupOwnerEmail, useHealth, useResetDatabase } from '../hooks/useBackend'
+import { AgentFilesEditor } from '../components/AgentFilesEditor'
 import type { Agent } from '../types'
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
@@ -180,73 +181,6 @@ function ApiKeySection({ agent }: { agent: Agent }) {
 
 // ── Heartbeat.md editor ──────────────────────────────────────────────────────
 
-function HeartbeatMdSection({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(value.length > 0)
-  const fileRef = useRef<HTMLInputElement>(null)
-
-  function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      if (typeof reader.result === 'string') onChange(reader.result)
-    }
-    reader.readAsText(file)
-    e.target.value = ''
-  }
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-300 transition-colors"
-      >
-        <FileText className="w-3.5 h-3.5" />
-        Heartbeat.md
-        {value ? <span className="text-green-500 text-[10px]">({value.length} chars)</span> : null}
-        <span className="text-gray-700">{open ? '▾' : '▸'}</span>
-      </button>
-      {open && (
-        <div className="mt-2 space-y-2">
-          <p className="text-xs text-gray-600">
-            The heartbeat file gives your agent actions and direction during each heartbeat cycle.
-            Paste content, type directly, or upload a .md file.
-          </p>
-          <textarea
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            rows={16}
-            spellCheck={false}
-            placeholder="# Heartbeat Instructions&#10;&#10;Paste your heartbeat.md content here..."
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm font-mono focus:outline-none focus:border-brand-500 resize-y leading-relaxed"
-          />
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-brand-400 border border-gray-700 hover:border-brand-600 rounded-lg px-2.5 py-1.5 transition-colors"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              Upload .md file
-            </button>
-            {value && (
-              <button
-                type="button"
-                onClick={() => onChange('')}
-                className="text-xs text-gray-600 hover:text-red-400 transition-colors"
-              >
-                Clear
-              </button>
-            )}
-            <input ref={fileRef} type="file" accept=".md,.txt,.markdown" onChange={handleUpload} className="hidden" />
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Agent config panel ────────────────────────────────────────────────────────
 
 function AgentSetupPanel({
@@ -265,7 +199,6 @@ function AgentSetupPanel({
     description: agent.persona.description,
     tone: agent.persona.tone,
     topics: agent.persona.topics.join(', '),
-    heartbeat_md: agent.heartbeat_md || '',
     post_interval_minutes: agent.schedule.post_interval_minutes,
     active_hours_start: agent.schedule.active_hours_start,
     active_hours_end: agent.schedule.active_hours_end,
@@ -296,7 +229,6 @@ function AgentSetupPanel({
       slot: agent.slot,
       data: {
         model: form.model,
-        heartbeat_md: form.heartbeat_md,
         persona: {
           name: form.name,
           description: form.description,
@@ -468,11 +400,11 @@ function AgentSetupPanel({
         />
       </div>
 
-      {/* Heartbeat.md */}
-      <HeartbeatMdSection
-        value={form.heartbeat_md}
-        onChange={v => setForm(f => ({ ...f, heartbeat_md: v }))}
-      />
+      {/* Agent files */}
+      <div>
+        <label className="text-xs text-gray-500 mb-2 block">Agent Files</label>
+        <AgentFilesEditor agent={agent} />
+      </div>
 
       {/* Schedule */}
       <div className="grid grid-cols-3 gap-3">
