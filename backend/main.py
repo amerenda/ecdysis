@@ -778,6 +778,7 @@ class PlaygroundConfigOverride(BaseModel):
     heartbeat_md: Optional[str] = None
     messaging_md: Optional[str] = None
     common_md: Optional[str] = None
+    model: Optional[str] = None
 
 
 async def _make_playground_runner(slot: int, overrides: PlaygroundConfigOverride | None = None) -> PlaygroundRunner:
@@ -799,15 +800,22 @@ async def _make_playground_runner(slot: int, overrides: PlaygroundConfigOverride
             config.messaging_md = overrides.messaging_md
         if overrides.common_md is not None:
             common_md_override = overrides.common_md
+        if overrides.model is not None:
+            config.model = overrides.model
     return PlaygroundRunner(config, pool, LLM_MANAGER_URL, _llm_api_key, common_md_override=common_md_override)
 
 
+class PlaygroundWarmRequest(BaseModel):
+    model: Optional[str] = None
+
+
 @app.post("/api/agents/{slot}/playground/warm")
-async def playground_warm(slot: int):
+async def playground_warm(slot: int, req: PlaygroundWarmRequest | None = None):
     """Pre-load the agent's model into VRAM. Call before browse/post/comment."""
     if slot not in range(1, 7):
         raise HTTPException(status_code=404, detail="Slot must be 1-6")
-    runner = await _make_playground_runner(slot)
+    overrides = PlaygroundConfigOverride(model=req.model) if req and req.model else None
+    runner = await _make_playground_runner(slot, overrides)
     await runner.ensure_model_loaded()
     return {"ok": True, "model": runner.config.model}
 

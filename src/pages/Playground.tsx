@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Loader2, Send, MessageSquare, ThumbsUp, Save, AlertCircle, Check, Eye } from 'lucide-react'
+import { Loader2, Send, MessageSquare, ThumbsUp, Save, AlertCircle, Check, Eye, RotateCcw } from 'lucide-react'
 import {
-  useAgents, useUpdateAgent, useCommonConfig, useUpdateCommonConfig,
+  useAgents, useModels, useUpdateAgent, useCommonConfig, useUpdateCommonConfig,
   usePlaygroundWarm, usePlaygroundBrowse, usePlaygroundPost, usePlaygroundComment,
   usePlaygroundPostLive, usePlaygroundCommentLive,
 } from '../hooks/useBackend'
@@ -222,6 +222,7 @@ const FILE_KEY_MAP: Record<FileTab, string> = {
 
 export function Playground() {
   const { data: agents } = useAgents()
+  const { data: availableModels } = useModels()
   const commonConfig = useCommonConfig()
   const updateAgent = useUpdateAgent()
   const updateCommon = useUpdateCommonConfig()
@@ -229,9 +230,11 @@ export function Playground() {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
   const [activeFileTab, setActiveFileTab] = useState<FileTab>('SOUL.md')
   const [editedFiles, setEditedFiles] = useState<Record<string, string>>({})
+  const [selectedModel, setSelectedModel] = useState<string>('')
   const [hasEdits, setHasEdits] = useState(false)
   const [saveConfirm, setSaveConfirm] = useState(false)
   const [saveResult, setSaveResult] = useState<string | null>(null)
+  const [discardConfirm, setDiscardConfirm] = useState(false)
 
   // Results state
   const [activeAction, setActiveAction] = useState<'browse' | 'post' | 'comment' | null>(null)
@@ -249,31 +252,55 @@ export function Playground() {
   // Load agent files and warm model when selection changes
   useEffect(() => {
     if (selectedAgent) {
-      const files: Record<string, string> = {
-        soul_md: selectedAgent.soul_md || '',
-        rules_md: selectedAgent.rules_md || '',
-        heartbeat_md: selectedAgent.heartbeat_md || '',
-        messaging_md: selectedAgent.messaging_md || '',
-        memory_md: selectedAgent.memory_md || '',
-        common_md: commonConfig.data?.common_md || '',
-      }
-      setEditedFiles(files)
-      setHasEdits(false)
-      setSaveConfirm(false)
-      setSaveResult(null)
-      setActiveAction(null)
+      loadFromAgent(selectedAgent)
       setModelReady(false)
       setWarmingModel(true)
-      warm.mutate(selectedAgent.slot, {
+      warm.mutate({ slot: selectedAgent.slot }, {
         onSuccess: () => { setModelReady(true); setWarmingModel(false) },
         onError: () => { setWarmingModel(false) },
       })
     }
   }, [selectedSlot])
 
+  function loadFromAgent(agent: Agent) {
+    setEditedFiles({
+      soul_md: agent.soul_md || '',
+      rules_md: agent.rules_md || '',
+      heartbeat_md: agent.heartbeat_md || '',
+      messaging_md: agent.messaging_md || '',
+      memory_md: agent.memory_md || '',
+      common_md: commonConfig.data?.common_md || '',
+    })
+    setSelectedModel(agent.model)
+    setHasEdits(false)
+    setSaveConfirm(false)
+    setDiscardConfirm(false)
+    setSaveResult(null)
+    setActiveAction(null)
+  }
+
+  function handleDiscard() {
+    if (!selectedAgent) return
+    loadFromAgent(selectedAgent)
+  }
+
   function updateFile(key: string, value: string) {
     setEditedFiles(prev => ({ ...prev, [key]: value }))
     setHasEdits(true)
+  }
+
+  function handleModelChange(model: string) {
+    setSelectedModel(model)
+    setHasEdits(true)
+    // Warm the new model
+    if (selectedSlot) {
+      setModelReady(false)
+      setWarmingModel(true)
+      warm.mutate({ slot: selectedSlot, model }, {
+        onSuccess: () => { setModelReady(true); setWarmingModel(false) },
+        onError: () => { setWarmingModel(false) },
+      })
+    }
   }
 
   function getOverrides() {
@@ -284,6 +311,7 @@ export function Playground() {
     if (editedFiles.heartbeat_md !== (selectedAgent.heartbeat_md || '')) o.heartbeat_md = editedFiles.heartbeat_md
     if (editedFiles.messaging_md !== (selectedAgent.messaging_md || '')) o.messaging_md = editedFiles.messaging_md
     if (editedFiles.common_md !== (commonConfig.data?.common_md || '')) o.common_md = editedFiles.common_md
+    if (selectedModel !== selectedAgent.model) o.model = selectedModel
     return o
   }
 
@@ -312,6 +340,7 @@ export function Playground() {
     if (editedFiles.rules_md !== (selectedAgent.rules_md || '')) agentUpdates.rules_md = editedFiles.rules_md
     if (editedFiles.heartbeat_md !== (selectedAgent.heartbeat_md || '')) agentUpdates.heartbeat_md = editedFiles.heartbeat_md
     if (editedFiles.messaging_md !== (selectedAgent.messaging_md || '')) agentUpdates.messaging_md = editedFiles.messaging_md
+    if (selectedModel !== selectedAgent.model) agentUpdates.model = selectedModel
 
     const commonChanged = editedFiles.common_md !== (commonConfig.data?.common_md || '')
 
@@ -354,7 +383,25 @@ export function Playground() {
 
         {selectedAgent && (
           <div className="text-xs text-gray-500 flex items-center gap-3">
-            <span>Model: <span className="text-gray-400">{selectedAgent.model}</span></span>
+            <span className="flex items-center gap-1">
+              Model:
+              <select
+                value={selectedModel}
+                onChange={e => handleModelChange(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-xs text-gray-300 focus:ring-brand-500 focus:border-brand-500"
+              >
+                {/* Always include the current selection even if not in models list */}
+                {availableModels?.map(m => (
+                  <option key={m.name} value={m.name}>{m.name}</option>
+                ))}
+                {availableModels && !availableModels.some(m => m.name === selectedModel) && (
+                  <option value={selectedModel}>{selectedModel}</option>
+                )}
+              </select>
+              {selectedModel !== selectedAgent.model && (
+                <span className="text-amber-400">*</span>
+              )}
+            </span>
             <span>Karma: <span className="text-gray-400">{selectedAgent.state.karma}</span></span>
             {warmingModel && (
               <span className="text-amber-400 flex items-center gap-1">
@@ -388,13 +435,27 @@ export function Playground() {
                       <button onClick={handleSave} className="text-xs px-2 py-1 rounded bg-green-700 hover:bg-green-600 text-white">Yes, save</button>
                       <button onClick={() => setSaveConfirm(false)} className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300">Cancel</button>
                     </>
+                  ) : discardConfirm ? (
+                    <>
+                      <span className="text-xs text-amber-400">Discard all changes?</span>
+                      <button onClick={() => { handleDiscard(); setDiscardConfirm(false) }} className="text-xs px-2 py-1 rounded bg-red-700 hover:bg-red-600 text-white">Yes, discard</button>
+                      <button onClick={() => setDiscardConfirm(false)} className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300">Cancel</button>
+                    </>
                   ) : (
-                    <button
-                      onClick={() => setSaveConfirm(true)}
-                      className="text-xs px-3 py-1 rounded bg-brand-700 hover:bg-brand-600 text-white flex items-center gap-1"
-                    >
-                      <Save className="w-3 h-3" /> Save to Agent
-                    </button>
+                    <>
+                      <button
+                        onClick={() => setDiscardConfirm(true)}
+                        className="text-xs px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 flex items-center gap-1"
+                      >
+                        <RotateCcw className="w-3 h-3" /> Reload from Agent
+                      </button>
+                      <button
+                        onClick={() => setSaveConfirm(true)}
+                        className="text-xs px-3 py-1 rounded bg-brand-700 hover:bg-brand-600 text-white flex items-center gap-1"
+                      >
+                        <Save className="w-3 h-3" /> Save to Agent
+                      </button>
+                    </>
                   )}
                 </div>
               )}

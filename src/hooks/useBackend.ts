@@ -318,11 +318,13 @@ export interface PlaygroundOverrides {
   rules_md?: string
   heartbeat_md?: string
   messaging_md?: string
+  model?: string
 }
 
 export function usePlaygroundWarm() {
   return useMutation({
-    mutationFn: (slot: number) => post<{ ok: boolean; model: string }>(`/api/agents/${slot}/playground/warm`),
+    mutationFn: ({ slot, model }: { slot: number; model?: string }) =>
+      post<{ ok: boolean; model: string }>(`/api/agents/${slot}/playground/warm`, model ? { model } : {}),
   })
 }
 
