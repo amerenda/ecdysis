@@ -358,7 +358,7 @@ export function Playground() {
       <h1 className="text-lg font-semibold text-gray-100">Playground</h1>
 
       {/* Agent selector */}
-      <div className="flex items-center gap-3">
+      <div className="space-y-2">
         <select
           value={selectedSlot ?? ''}
           onChange={e => setSelectedSlot(e.target.value ? Number(e.target.value) : null)}
@@ -373,7 +373,7 @@ export function Playground() {
         </select>
 
         {selectedAgent && (
-          <div className="text-xs text-gray-500 flex items-center gap-3">
+          <div className="text-xs text-gray-500 flex items-center gap-3 flex-wrap">
             <span className="flex items-center gap-1">
               Model:
               <select
@@ -381,7 +381,6 @@ export function Playground() {
                 onChange={e => handleModelChange(e.target.value)}
                 className="bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-xs text-gray-300 focus:ring-brand-500 focus:border-brand-500"
               >
-                {/* Always include the current selection even if not in models list */}
                 {availableModels?.map(m => (
                   <option key={m.name} value={m.name}>{m.name}</option>
                 ))}
