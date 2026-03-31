@@ -28,6 +28,56 @@ class PlaygroundRunner:
         self.llm_api_key = llm_api_key
         self.client = MoltbookClient(config.api_key)
         self._common_md_override = common_md_override
+        self._model_loaded = False
+
+    async def ensure_model_loaded(self):
+        """Pre-load the agent's model into VRAM via llm-manager before making LLM calls."""
+        if self._model_loaded:
+            return
+        model = self.config.model
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=300)) as http:
+                r = await http.post(
+                    f"{self.llm_base}/api/llm/models/load",
+                    headers={"Authorization": f"Bearer {self.llm_api_key}"},
+                    json={"model": model, "keep_alive": -1},
+                )
+                if r.status_code == 200:
+                    logger.info("[playground-%d] Model load requested: %s", self.slot, model)
+                    # Wait for model to actually be ready by doing a tiny test call
+                    await self._wait_for_model()
+                else:
+                    logger.warning("[playground-%d] Model load returned %d: %s", self.slot, r.status_code, r.text[:200])
+        except Exception as e:
+            logger.warning("[playground-%d] Model load failed: %s — will try LLM calls anyway", self.slot, e)
+        self._model_loaded = True
+
+    async def _wait_for_model(self):
+        """Poll with a tiny completion to confirm the model is loaded and ready."""
+        import asyncio
+        model = self.config.model
+        for attempt in range(30):  # up to ~60s
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=30)) as http:
+                    r = await http.post(
+                        f"{self.llm_base}/v1/chat/completions",
+                        headers={"Authorization": f"Bearer {self.llm_api_key}"},
+                        json={
+                            "model": model,
+                            "messages": [{"role": "user", "content": "hi"}],
+                            "stream": False,
+                        },
+                    )
+                    if r.status_code == 200:
+                        logger.info("[playground-%d] Model %s is ready", self.slot, model)
+                        return
+                    if r.status_code != 503:
+                        logger.warning("[playground-%d] Model warmup got %d", self.slot, r.status_code)
+                        return
+            except Exception:
+                pass
+            await asyncio.sleep(2)
+        logger.warning("[playground-%d] Model warmup timed out after 60s", self.slot)
 
     async def _get_common_md(self) -> str:
         if self._common_md_override is not None:
@@ -91,6 +141,7 @@ class PlaygroundRunner:
 
     async def browse(self) -> dict:
         """Fetch live feed and determine what the agent would upvote/comment on."""
+        await self.ensure_model_loaded()
         feed = await self.client.feed(sort="new", limit=15)
         own_name = self.config.persona.name
         beh = self.config.behavior
@@ -150,6 +201,7 @@ class PlaygroundRunner:
 
     async def generate_post(self) -> dict:
         """Generate a post the agent would create, without posting it."""
+        await self.ensure_model_loaded()
         beh = self.config.behavior
         topics = self.config.persona.topics
         max_len = beh.max_post_length
@@ -293,6 +345,7 @@ class PlaygroundRunner:
 
     async def generate_comments(self) -> dict:
         """Find posts the agent would comment on and generate comments."""
+        await self.ensure_model_loaded()
         feed = await self.client.feed(sort="new", limit=15)
         own_name = self.config.persona.name
         comments = []

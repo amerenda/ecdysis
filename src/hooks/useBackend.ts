@@ -320,6 +320,12 @@ export interface PlaygroundOverrides {
   messaging_md?: string
 }
 
+export function usePlaygroundWarm() {
+  return useMutation({
+    mutationFn: (slot: number) => post<{ ok: boolean; model: string }>(`/api/agents/${slot}/playground/warm`),
+  })
+}
+
 export function usePlaygroundBrowse() {
   return useMutation({
     mutationFn: ({ slot, overrides }: { slot: number; overrides?: PlaygroundOverrides }) =>

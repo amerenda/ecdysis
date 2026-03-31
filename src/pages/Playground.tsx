@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Loader2, Send, MessageSquare, ThumbsUp, Save, AlertCircle, Check, Eye } from 'lucide-react'
 import {
   useAgents, useUpdateAgent, useCommonConfig, useUpdateCommonConfig,
-  usePlaygroundBrowse, usePlaygroundPost, usePlaygroundComment,
+  usePlaygroundWarm, usePlaygroundBrowse, usePlaygroundPost, usePlaygroundComment,
   usePlaygroundPostLive, usePlaygroundCommentLive,
 } from '../hooks/useBackend'
 import type {
@@ -235,7 +235,10 @@ export function Playground() {
 
   // Results state
   const [activeAction, setActiveAction] = useState<'browse' | 'post' | 'comment' | null>(null)
+  const [modelReady, setModelReady] = useState(false)
+  const [warmingModel, setWarmingModel] = useState(false)
 
+  const warm = usePlaygroundWarm()
   const browse = usePlaygroundBrowse()
   const genPost = usePlaygroundPost()
   const genComment = usePlaygroundComment()
@@ -243,7 +246,7 @@ export function Playground() {
   const configured = agents?.filter(a => a.registered && a.api_key) || []
   const selectedAgent = configured.find(a => a.slot === selectedSlot) || null
 
-  // Load agent files when selection changes
+  // Load agent files and warm model when selection changes
   useEffect(() => {
     if (selectedAgent) {
       const files: Record<string, string> = {
@@ -259,8 +262,14 @@ export function Playground() {
       setSaveConfirm(false)
       setSaveResult(null)
       setActiveAction(null)
+      setModelReady(false)
+      setWarmingModel(true)
+      warm.mutate(selectedAgent.slot, {
+        onSuccess: () => { setModelReady(true); setWarmingModel(false) },
+        onError: () => { setWarmingModel(false) },
+      })
     }
-  }, [selectedSlot, selectedAgent?.soul_md, selectedAgent?.rules_md, selectedAgent?.heartbeat_md, selectedAgent?.messaging_md, commonConfig.data?.common_md])
+  }, [selectedSlot])
 
   function updateFile(key: string, value: string) {
     setEditedFiles(prev => ({ ...prev, [key]: value }))
@@ -347,6 +356,16 @@ export function Playground() {
           <div className="text-xs text-gray-500 flex items-center gap-3">
             <span>Model: <span className="text-gray-400">{selectedAgent.model}</span></span>
             <span>Karma: <span className="text-gray-400">{selectedAgent.state.karma}</span></span>
+            {warmingModel && (
+              <span className="text-amber-400 flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" /> Loading model...
+              </span>
+            )}
+            {modelReady && !warmingModel && (
+              <span className="text-green-400 flex items-center gap-1">
+                <Check className="w-3 h-3" /> Model ready
+              </span>
+            )}
           </div>
         )}
       </div>

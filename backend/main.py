@@ -802,6 +802,16 @@ async def _make_playground_runner(slot: int, overrides: PlaygroundConfigOverride
     return PlaygroundRunner(config, pool, LLM_MANAGER_URL, _llm_api_key, common_md_override=common_md_override)
 
 
+@app.post("/api/agents/{slot}/playground/warm")
+async def playground_warm(slot: int):
+    """Pre-load the agent's model into VRAM. Call before browse/post/comment."""
+    if slot not in range(1, 7):
+        raise HTTPException(status_code=404, detail="Slot must be 1-6")
+    runner = await _make_playground_runner(slot)
+    await runner.ensure_model_loaded()
+    return {"ok": True, "model": runner.config.model}
+
+
 @app.post("/api/agents/{slot}/playground/browse")
 async def playground_browse(slot: int, overrides: PlaygroundConfigOverride | None = None):
     if slot not in range(1, 7):
