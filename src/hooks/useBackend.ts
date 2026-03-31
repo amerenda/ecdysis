@@ -67,6 +67,7 @@ export function useModels() {
     queryKey: ['models'],
     queryFn: () => get('/api/models'),
     select: (data) => [...data].sort((a, b) => a.name.localeCompare(b.name)),
+    refetchInterval: 30_000,
   })
 }
 

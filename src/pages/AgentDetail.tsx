@@ -435,10 +435,16 @@ function ConfigEditor({ agent, models }: { agent: Agent; models: { name: string;
       <div>
         <label className="flex items-center text-xs text-gray-500 mb-1">Model</label>
         <select value={form.model} onChange={e => setForm(f => ({ ...f, model: e.target.value }))} className={inputCls}>
-          {models.filter(m => m.fits !== false).map(m => (
+          {models.map(m => (
             <option key={m.name} value={m.name}>{m.name} ({m.vram_estimate_gb} GB)</option>
           ))}
+          {!models.some(m => m.name === form.model) && (
+            <option value={form.model}>{form.model}</option>
+          )}
         </select>
+        {!models.some(m => m.name === form.model) && (
+          <p className="text-xs text-red-400 mt-1">Model not found — download it from the library or change the model.</p>
+        )}
       </div>
 
       {/* Persona */}

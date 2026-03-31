@@ -393,12 +393,17 @@ export function Playground() {
               )}
             </span>
             <span>Karma: <span className="text-gray-400">{selectedAgent.state.karma}</span></span>
+            {availableModels && !availableModels.some(m => m.name === selectedModel) && (
+              <span className="text-red-400 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" /> Model not found
+              </span>
+            )}
             {warmingModel && (
               <span className="text-amber-400 flex items-center gap-1">
                 <Loader2 className="w-3 h-3 animate-spin" /> Loading model...
               </span>
             )}
-            {modelReady && !warmingModel && (
+            {modelReady && !warmingModel && availableModels?.some(m => m.name === selectedModel) && (
               <span className="text-green-400 flex items-center gap-1">
                 <Check className="w-3 h-3" /> Model ready
               </span>
