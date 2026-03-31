@@ -73,12 +73,12 @@ jobs:
 
       - name: Build and push frontend (arm64)
         run: |
-          docker build -t "amerenda/ecdysis-frontend:${{ needs.set-tag.outputs.tag }}-arm64" .
+          docker build --no-cache -t "amerenda/ecdysis-frontend:${{ needs.set-tag.outputs.tag }}-arm64" .
           docker push "amerenda/ecdysis-frontend:${{ needs.set-tag.outputs.tag }}-arm64"
 
       - name: Build and push backend (arm64)
         run: |
-          docker build -t "amerenda/ecdysis-backend:${{ needs.set-tag.outputs.tag }}-arm64" -f backend/Dockerfile backend
+          docker build --no-cache -t "amerenda/ecdysis-backend:${{ needs.set-tag.outputs.tag }}-arm64" -f backend/Dockerfile backend
           docker push "amerenda/ecdysis-backend:${{ needs.set-tag.outputs.tag }}-arm64"
 
   manifest:

@@ -140,7 +140,8 @@ class PlaygroundRunner:
             return ""
 
     async def browse(self) -> dict:
-        """Fetch live feed and determine what the agent would upvote/comment on."""
+        """Fetch live feed and determine what the agent would upvote/comment on.
+        Uses a single batched LLM call for comment decisions instead of one per post."""
         await self.ensure_model_loaded()
         feed = await self.client.feed(sort="new", limit=15)
         own_name = self.config.persona.name
@@ -153,7 +154,8 @@ class PlaygroundRunner:
             if c["registered"] and c["name"] != own_name
         )
 
-        results = []
+        # Build candidate list (filter own posts, short posts)
+        candidates = []
         for post in feed.get("posts", []):
             pid = post.get("id")
             if not pid:
@@ -161,30 +163,55 @@ class PlaygroundRunner:
             author = post.get("author", {}).get("name", "")
             if author == own_name:
                 continue
+            candidates.append(post)
 
+        # Batch comment decision: one LLM call for all posts
+        comment_worthy: set[int] = set()
+        commentable = [
+            (i, p) for i, p in enumerate(candidates)
+            if len(p.get("content", "")) > 50
+        ]
+        if commentable:
+            numbered = "\n\n".join(
+                f'{i+1}. "{p.get("title")}" by {p.get("author", {}).get("name", "?")}:\n'
+                f'{p.get("content", "")[:200]}'
+                for i, (_, p) in enumerate(commentable)
+            )
+            batch_decision = await self._llm(
+                f"Here are {len(commentable)} posts from your feed. "
+                f"List ONLY the numbers of posts you'd comment on (interesting, "
+                f"thought-provoking, or relevant to your topics). "
+                f"Reply with just the numbers separated by commas, or NONE.\n\n{numbered}",
+            )
+            # Parse numbers from response
+            for num_str in re.findall(r'\d+', batch_decision):
+                idx = int(num_str) - 1
+                if 0 <= idx < len(commentable):
+                    comment_worthy.add(commentable[idx][0])
+
+        # Generate comments only for selected posts (typically 0-3)
+        generated_comments: dict[int, str] = {}
+        for ci in comment_worthy:
+            post = candidates[ci]
+            comment = await self._llm(
+                f'Write one thoughtful comment on this post (1-2 sentences):\n'
+                f'"{post.get("title")}"\n{post.get("content", "")[:500]}',
+            )
+            if comment:
+                generated_comments[ci] = comment
+
+        # Build results
+        results = []
+        for i, post in enumerate(candidates):
+            author = post.get("author", {}).get("name", "")
             is_peer = author in peer_names
             would_upvote = (beh.auto_like and not is_peer) or (is_peer and beh.send_peer_likes)
             upvote_reason = ""
             if would_upvote:
                 upvote_reason = "peer agent (send_peer_likes)" if is_peer else "auto_like enabled"
 
-            # Check if agent would comment
-            would_comment = False
-            generated_comment = ""
-            if len(post.get("content", "")) > 50:
-                decision = await self._llm(
-                    f'Post "{post.get("title")}" by {author}:\n'
-                    f'{post.get("content", "")[:300]}\n\nComment? YES or NO.',
-                )
-                if decision.upper().startswith("YES"):
-                    would_comment = True
-                    generated_comment = await self._llm(
-                        f'Write one thoughtful comment on this post (1-2 sentences):\n'
-                        f'"{post.get("title")}"\n{post.get("content", "")[:500]}',
-                    )
-
             results.append({
-                "id": pid,
+                "id": post.get("id"),
                 "title": post.get("title", ""),
                 "content": post.get("content", ""),
                 "author": author,
@@ -193,8 +220,8 @@ class PlaygroundRunner:
                 "comment_count": post.get("comment_count", 0),
                 "would_upvote": would_upvote,
                 "upvote_reason": upvote_reason,
-                "would_comment": would_comment,
-                "generated_comment": generated_comment,
+                "would_comment": i in comment_worthy,
+                "generated_comment": generated_comments.get(i, ""),
             })
 
         return {"posts": results}
@@ -344,12 +371,14 @@ class PlaygroundRunner:
         }
 
     async def generate_comments(self) -> dict:
-        """Find posts the agent would comment on and generate comments."""
+        """Find posts the agent would comment on and generate comments.
+        Uses the same batched approach as browse — one LLM call for decisions."""
         await self.ensure_model_loaded()
         feed = await self.client.feed(sort="new", limit=15)
         own_name = self.config.persona.name
-        comments = []
 
+        # Filter to commentable posts
+        commentable = []
         for post in feed.get("posts", []):
             pid = post.get("id")
             if not pid:
@@ -359,14 +388,33 @@ class PlaygroundRunner:
                 continue
             if len(post.get("content", "")) <= 50:
                 continue
+            commentable.append(post)
 
-            decision = await self._llm(
-                f'Post "{post.get("title")}" by {author}:\n'
-                f'{post.get("content", "")[:300]}\n\nComment? YES or NO.',
-            )
-            if not decision.upper().startswith("YES"):
-                continue
+        if not commentable:
+            return {"comments": []}
 
+        # Batch decision
+        numbered = "\n\n".join(
+            f'{i+1}. "{p.get("title")}" by {p.get("author", {}).get("name", "?")}:\n'
+            f'{p.get("content", "")[:200]}'
+            for i, p in enumerate(commentable)
+        )
+        batch_decision = await self._llm(
+            f"Here are {len(commentable)} posts. List ONLY the numbers of posts "
+            f"you'd comment on (interesting, thought-provoking, relevant). "
+            f"Reply with just the numbers separated by commas, or NONE.\n\n{numbered}",
+        )
+
+        selected: list[int] = []
+        for num_str in re.findall(r'\d+', batch_decision):
+            idx = int(num_str) - 1
+            if 0 <= idx < len(commentable):
+                selected.append(idx)
+
+        # Generate comments for selected posts
+        comments = []
+        for idx in selected:
+            post = commentable[idx]
             generated = await self._llm(
                 f'Write one thoughtful comment on this post (1-2 sentences):\n'
                 f'"{post.get("title")}"\n{post.get("content", "")[:500]}',
@@ -381,10 +429,10 @@ class PlaygroundRunner:
                 submolt = post.get("submolt_name", "")
 
             comments.append({
-                "post_id": pid,
+                "post_id": post.get("id"),
                 "post_title": post.get("title", ""),
                 "post_content": post.get("content", ""),
-                "post_author": author,
+                "post_author": post.get("author", {}).get("name", ""),
                 "post_submolt": submolt,
                 "generated_comment": generated,
                 "parent_comment": None,
