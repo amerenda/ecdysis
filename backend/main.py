@@ -32,7 +32,7 @@ from config import (
 )
 from agent_runner import AgentRunner, get_prompt_log
 from moltbook_client import MoltbookClient
-from playground import PlaygroundRunner
+from playground import PlaygroundRunner, create_task, get_task, complete_task, fail_task
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -820,12 +820,32 @@ async def playground_warm(slot: int, req: PlaygroundWarmRequest | None = None):
     return {"ok": True, "model": runner.config.model}
 
 
+async def _run_playground_task(task_id: str, runner: PlaygroundRunner, action: str):
+    """Run a playground action in the background and store result."""
+    try:
+        if action == "browse":
+            result = await runner.browse(task_id)
+        elif action == "post":
+            result = await runner.generate_post(task_id)
+        elif action == "comment":
+            result = await runner.generate_comments(task_id)
+        else:
+            fail_task(task_id, f"Unknown action: {action}")
+            return
+        complete_task(task_id, result)
+    except Exception as e:
+        logger.error("Playground task %s failed: %s", task_id, e)
+        fail_task(task_id, str(e))
+
+
 @app.post("/api/agents/{slot}/playground/browse")
 async def playground_browse(slot: int, overrides: PlaygroundConfigOverride | None = None):
     if slot not in range(1, 7):
         raise HTTPException(status_code=404, detail="Slot must be 1-6")
     runner = await _make_playground_runner(slot, overrides)
-    return await runner.browse()
+    task_id = create_task("browse", slot)
+    asyncio.create_task(_run_playground_task(task_id, runner, "browse"))
+    return {"task_id": task_id}
 
 
 @app.post("/api/agents/{slot}/playground/post")
@@ -833,7 +853,9 @@ async def playground_post(slot: int, overrides: PlaygroundConfigOverride | None 
     if slot not in range(1, 7):
         raise HTTPException(status_code=404, detail="Slot must be 1-6")
     runner = await _make_playground_runner(slot, overrides)
-    return await runner.generate_post()
+    task_id = create_task("post", slot)
+    asyncio.create_task(_run_playground_task(task_id, runner, "post"))
+    return {"task_id": task_id}
 
 
 @app.post("/api/agents/{slot}/playground/comment")
@@ -841,7 +863,17 @@ async def playground_comment(slot: int, overrides: PlaygroundConfigOverride | No
     if slot not in range(1, 7):
         raise HTTPException(status_code=404, detail="Slot must be 1-6")
     runner = await _make_playground_runner(slot, overrides)
-    return await runner.generate_comments()
+    task_id = create_task("comment", slot)
+    asyncio.create_task(_run_playground_task(task_id, runner, "comment"))
+    return {"task_id": task_id}
+
+
+@app.get("/api/agents/playground/task/{task_id}")
+async def playground_task_status(task_id: str):
+    task = get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
 
 
 class PlaygroundPostLiveRequest(BaseModel):

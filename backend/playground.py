@@ -1,8 +1,11 @@
 """Playground: run individual agent operations with live data, returning rich structured results."""
 
+import asyncio
 import logging
 import random
 import re
+import time
+import uuid
 
 import asyncpg
 import httpx
@@ -12,6 +15,54 @@ from config import AgentConfig, config_from_db
 from moltbook_client import MoltbookClient
 
 logger = logging.getLogger(__name__)
+
+
+# ── Async task store ─────────────────────────────────────────────────────────
+
+_tasks: dict[str, dict] = {}
+MAX_TASKS = 50  # ring buffer — evict oldest when full
+
+
+def create_task(action: str, slot: int) -> str:
+    task_id = f"pg-{uuid.uuid4().hex[:12]}"
+    _tasks[task_id] = {
+        "id": task_id,
+        "action": action,
+        "slot": slot,
+        "status": "running",
+        "progress": "Starting...",
+        "result": None,
+        "error": None,
+        "created_at": time.time(),
+    }
+    # Evict oldest if over limit
+    if len(_tasks) > MAX_TASKS:
+        oldest = min(_tasks, key=lambda k: _tasks[k]["created_at"])
+        del _tasks[oldest]
+    return task_id
+
+
+def get_task(task_id: str) -> dict | None:
+    return _tasks.get(task_id)
+
+
+def update_progress(task_id: str, msg: str):
+    if task_id in _tasks:
+        _tasks[task_id]["progress"] = msg
+
+
+def complete_task(task_id: str, result: dict):
+    if task_id in _tasks:
+        _tasks[task_id]["status"] = "completed"
+        _tasks[task_id]["result"] = result
+        _tasks[task_id]["progress"] = "Done"
+
+
+def fail_task(task_id: str, error: str):
+    if task_id in _tasks:
+        _tasks[task_id]["status"] = "failed"
+        _tasks[task_id]["error"] = error
+        _tasks[task_id]["progress"] = f"Failed: {error}"
 
 
 class PlaygroundRunner:
@@ -30,11 +81,16 @@ class PlaygroundRunner:
         self._common_md_override = common_md_override
         self._model_loaded = False
 
-    async def ensure_model_loaded(self):
+    def _progress(self, task_id: str | None, msg: str):
+        if task_id:
+            update_progress(task_id, msg)
+
+    async def ensure_model_loaded(self, task_id: str | None = None):
         """Pre-load the agent's model into VRAM via llm-manager before making LLM calls."""
         if self._model_loaded:
             return
         model = self.config.model
+        self._progress(task_id, f"Loading model {model}...")
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=300)) as http:
                 r = await http.post(
@@ -139,10 +195,11 @@ class PlaygroundRunner:
             logger.error("Playground LLM error slot %d: %s", self.slot, e)
             return ""
 
-    async def browse(self) -> dict:
+    async def browse(self, task_id: str | None = None) -> dict:
         """Fetch live feed and determine what the agent would upvote/comment on.
         Uses a single batched LLM call for comment decisions instead of one per post."""
-        await self.ensure_model_loaded()
+        await self.ensure_model_loaded(task_id)
+        self._progress(task_id, "Fetching feed...")
         feed = await self.client.feed(sort="new", limit=15)
         own_name = self.config.persona.name
         beh = self.config.behavior
@@ -164,6 +221,8 @@ class PlaygroundRunner:
             if author == own_name:
                 continue
             candidates.append(post)
+
+        self._progress(task_id, f"Evaluating {len(candidates)} posts...")
 
         # Batch comment decision: one LLM call for all posts
         comment_worthy: set[int] = set()
@@ -190,6 +249,8 @@ class PlaygroundRunner:
                     comment_worthy.add(commentable[idx][0])
 
         # Generate comments only for selected posts (typically 0-3)
+        if comment_worthy:
+            self._progress(task_id, f"Generating {len(comment_worthy)} comment(s)...")
         generated_comments: dict[int, str] = {}
         for ci in comment_worthy:
             post = candidates[ci]
@@ -226,13 +287,14 @@ class PlaygroundRunner:
 
         return {"posts": results}
 
-    async def generate_post(self) -> dict:
+    async def generate_post(self, task_id: str | None = None) -> dict:
         """Generate a post the agent would create, without posting it."""
-        await self.ensure_model_loaded()
+        await self.ensure_model_loaded(task_id)
         beh = self.config.behavior
         topics = self.config.persona.topics
         max_len = beh.max_post_length
 
+        self._progress(task_id, "Choosing submolt...")
         # Choose submolt
         submolt = None
         submolt_reason = ""
@@ -312,6 +374,7 @@ class PlaygroundRunner:
             f"Max {max_len} chars total. No hashtags. No markdown.{avoid_text}"
         )
 
+        self._progress(task_id, "Generating post...")
         title = ""
         body = ""
         for attempt in range(2):
@@ -370,10 +433,11 @@ class PlaygroundRunner:
             "submolt_selection_reason": submolt_reason,
         }
 
-    async def generate_comments(self) -> dict:
+    async def generate_comments(self, task_id: str | None = None) -> dict:
         """Find posts the agent would comment on and generate comments.
         Uses the same batched approach as browse — one LLM call for decisions."""
-        await self.ensure_model_loaded()
+        await self.ensure_model_loaded(task_id)
+        self._progress(task_id, "Fetching feed...")
         feed = await self.client.feed(sort="new", limit=15)
         own_name = self.config.persona.name
 
@@ -394,6 +458,7 @@ class PlaygroundRunner:
             return {"comments": []}
 
         # Batch decision
+        self._progress(task_id, f"Evaluating {len(commentable)} posts...")
         numbered = "\n\n".join(
             f'{i+1}. "{p.get("title")}" by {p.get("author", {}).get("name", "?")}:\n'
             f'{p.get("content", "")[:200]}'
@@ -412,6 +477,8 @@ class PlaygroundRunner:
                 selected.append(idx)
 
         # Generate comments for selected posts
+        if selected:
+            self._progress(task_id, f"Generating {len(selected)} comment(s)...")
         comments = []
         for idx in selected:
             post = commentable[idx]

@@ -328,24 +328,33 @@ export function usePlaygroundWarm() {
   })
 }
 
-export function usePlaygroundBrowse() {
+export interface PlaygroundTask {
+  id: string
+  action: string
+  slot: number
+  status: 'running' | 'completed' | 'failed'
+  progress: string
+  result: unknown
+  error: string | null
+}
+
+export function usePlaygroundSubmit() {
   return useMutation({
-    mutationFn: ({ slot, overrides }: { slot: number; overrides?: PlaygroundOverrides }) =>
-      post<PlaygroundBrowseResult>(`/api/agents/${slot}/playground/browse`, overrides || {}),
+    mutationFn: ({ slot, action, overrides }: { slot: number; action: 'browse' | 'post' | 'comment'; overrides?: PlaygroundOverrides }) =>
+      post<{ task_id: string }>(`/api/agents/${slot}/playground/${action}`, overrides || {}),
   })
 }
 
-export function usePlaygroundPost() {
-  return useMutation({
-    mutationFn: ({ slot, overrides }: { slot: number; overrides?: PlaygroundOverrides }) =>
-      post<PlaygroundPostResult>(`/api/agents/${slot}/playground/post`, overrides || {}),
-  })
-}
-
-export function usePlaygroundComment() {
-  return useMutation({
-    mutationFn: ({ slot, overrides }: { slot: number; overrides?: PlaygroundOverrides }) =>
-      post<PlaygroundCommentResult>(`/api/agents/${slot}/playground/comment`, overrides || {}),
+export function usePlaygroundTaskStatus(taskId: string | null) {
+  return useQuery<PlaygroundTask>({
+    queryKey: ['playground-task', taskId],
+    queryFn: () => get(`/api/agents/playground/task/${taskId}`),
+    enabled: !!taskId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      if (status === 'completed' || status === 'failed') return false
+      return 2000
+    },
   })
 }
 

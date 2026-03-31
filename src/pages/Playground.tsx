@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from 'react'
 import { Loader2, Send, MessageSquare, ThumbsUp, Save, AlertCircle, Check, Eye, RotateCcw } from 'lucide-react'
 import {
   useAgents, useModels, useUpdateAgent, useCommonConfig, useUpdateCommonConfig,
-  usePlaygroundWarm, usePlaygroundBrowse, usePlaygroundPost, usePlaygroundComment,
+  usePlaygroundWarm, usePlaygroundSubmit, usePlaygroundTaskStatus,
   usePlaygroundPostLive, usePlaygroundCommentLive,
 } from '../hooks/useBackend'
 import type {
-  Agent, PlaygroundBrowsePost, PlaygroundPostResult, PlaygroundCommentEntry,
+  Agent, PlaygroundBrowsePost, PlaygroundBrowseResult, PlaygroundPostResult,
+  PlaygroundCommentResult, PlaygroundCommentEntry,
 } from '../types'
 
 // ── Post card (used in browse + comment results) ────────────────────────────
@@ -238,14 +239,14 @@ export function Playground() {
 
   // Results state
   const [activeAction, setActiveAction] = useState<'browse' | 'post' | 'comment' | null>(null)
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
   const [modelReady, setModelReady] = useState(false)
   const [warmingModel, setWarmingModel] = useState(false)
   const warmGenRef = useRef(0)  // generation counter to ignore stale warm callbacks
 
   const warm = usePlaygroundWarm()
-  const browse = usePlaygroundBrowse()
-  const genPost = usePlaygroundPost()
-  const genComment = usePlaygroundComment()
+  const submit = usePlaygroundSubmit()
+  const taskStatus = usePlaygroundTaskStatus(currentTaskId)
 
   const configured = agents?.filter(a => a.registered && a.api_key) || []
   const selectedAgent = configured.find(a => a.slot === selectedSlot) || null
@@ -313,22 +314,13 @@ export function Playground() {
     return o
   }
 
-  function handleBrowse() {
+  function runAction(action: 'browse' | 'post' | 'comment') {
     if (!selectedSlot) return
-    setActiveAction('browse')
-    browse.mutate({ slot: selectedSlot, overrides: getOverrides() })
-  }
-
-  function handlePost() {
-    if (!selectedSlot) return
-    setActiveAction('post')
-    genPost.mutate({ slot: selectedSlot, overrides: getOverrides() })
-  }
-
-  function handleComment() {
-    if (!selectedSlot) return
-    setActiveAction('comment')
-    genComment.mutate({ slot: selectedSlot, overrides: getOverrides() })
+    setActiveAction(action)
+    setCurrentTaskId(null)
+    submit.mutate({ slot: selectedSlot, action, overrides: getOverrides() }, {
+      onSuccess: (data) => setCurrentTaskId(data.task_id),
+    })
   }
 
   async function handleSave() {
@@ -358,7 +350,8 @@ export function Playground() {
     }
   }
 
-  const isLoading = browse.isPending || genPost.isPending || genComment.isPending
+  const isTaskRunning = currentTaskId != null && taskStatus.data?.status === 'running'
+  const isLoading = submit.isPending || isTaskRunning
 
   return (
     <div className="space-y-4">
@@ -504,30 +497,23 @@ export function Playground() {
 
             {/* Action buttons */}
             <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={handleBrowse}
-                disabled={isLoading}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm text-gray-200 disabled:opacity-50 transition-colors"
-              >
-                {browse.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
-                Browse & Upvote
-              </button>
-              <button
-                onClick={handlePost}
-                disabled={isLoading}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm text-gray-200 disabled:opacity-50 transition-colors"
-              >
-                {genPost.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                Post
-              </button>
-              <button
-                onClick={handleComment}
-                disabled={isLoading}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm text-gray-200 disabled:opacity-50 transition-colors"
-              >
-                {genComment.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
-                Comment
-              </button>
+              {([
+                { action: 'browse' as const, label: 'Browse & Upvote', icon: Eye },
+                { action: 'post' as const, label: 'Post', icon: Send },
+                { action: 'comment' as const, label: 'Comment', icon: MessageSquare },
+              ]).map(({ action, label, icon: Icon }) => (
+                <button
+                  key={action}
+                  onClick={() => runAction(action)}
+                  disabled={isLoading}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm text-gray-200 disabled:opacity-50 transition-colors"
+                >
+                  {isLoading && activeAction === action
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Icon className="w-4 h-4" />}
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -543,41 +529,40 @@ export function Playground() {
               </div>
             )}
 
-            {isLoading && (
+            {/* Progress indicator */}
+            {isLoading && taskStatus.data && (
               <div className="flex items-center gap-2 text-gray-400 text-sm py-8 justify-center">
                 <Loader2 className="w-5 h-5 animate-spin" />
-                Running LLM inference and fetching live data...
+                {taskStatus.data.progress}
+              </div>
+            )}
+            {isLoading && !taskStatus.data && (
+              <div className="flex items-center gap-2 text-gray-400 text-sm py-8 justify-center">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Submitting...
+              </div>
+            )}
+
+            {/* Task failed */}
+            {taskStatus.data?.status === 'failed' && (
+              <div className="text-sm text-red-400 flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" /> {taskStatus.data.error}
               </div>
             )}
 
             {/* Browse results */}
-            {activeAction === 'browse' && browse.data && !browse.isPending && (
-              <BrowseResults posts={browse.data.posts} slot={selectedSlot!} />
-            )}
-            {activeAction === 'browse' && browse.isError && (
-              <div className="text-sm text-red-400 flex items-center gap-1">
-                <AlertCircle className="w-4 h-4" /> {String(browse.error)}
-              </div>
+            {activeAction === 'browse' && taskStatus.data?.status === 'completed' && (
+              <BrowseResults posts={(taskStatus.data.result as PlaygroundBrowseResult).posts} slot={selectedSlot!} />
             )}
 
             {/* Post result */}
-            {activeAction === 'post' && genPost.data && !genPost.isPending && (
-              <PostPreview result={genPost.data} slot={selectedSlot!} agentName={selectedAgent.persona.name} />
-            )}
-            {activeAction === 'post' && genPost.isError && (
-              <div className="text-sm text-red-400 flex items-center gap-1">
-                <AlertCircle className="w-4 h-4" /> {String(genPost.error)}
-              </div>
+            {activeAction === 'post' && taskStatus.data?.status === 'completed' && (
+              <PostPreview result={taskStatus.data.result as PlaygroundPostResult} slot={selectedSlot!} agentName={selectedAgent.persona.name} />
             )}
 
             {/* Comment results */}
-            {activeAction === 'comment' && genComment.data && !genComment.isPending && (
-              <CommentResults comments={genComment.data.comments} slot={selectedSlot!} />
-            )}
-            {activeAction === 'comment' && genComment.isError && (
-              <div className="text-sm text-red-400 flex items-center gap-1">
-                <AlertCircle className="w-4 h-4" /> {String(genComment.error)}
-              </div>
+            {activeAction === 'comment' && taskStatus.data?.status === 'completed' && (
+              <CommentResults comments={(taskStatus.data.result as PlaygroundCommentResult).comments} slot={selectedSlot!} />
             )}
           </div>
         </div>
