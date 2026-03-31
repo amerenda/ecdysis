@@ -104,3 +104,51 @@ export interface VramCheck {
   per_model: { model: string; vram_gb: number }[]
   warning: string | null
 }
+
+// ── Playground ─────────────────────────────────────────────────────────────
+
+export interface PlaygroundBrowsePost {
+  id: string
+  title: string
+  content: string
+  author: string
+  submolt: string
+  upvotes: number
+  comment_count: number
+  would_upvote: boolean
+  upvote_reason: string
+  would_comment: boolean
+  generated_comment: string
+}
+
+export interface PlaygroundBrowseResult {
+  posts: PlaygroundBrowsePost[]
+}
+
+export interface PlaygroundPostResult {
+  submolt?: string
+  title?: string
+  content?: string
+  submolt_selection_reason?: string
+  error?: string
+}
+
+export interface PlaygroundCommentEntry {
+  post_id: string
+  post_title: string
+  post_content: string
+  post_author: string
+  post_submolt: string
+  generated_comment: string
+  parent_comment: { author: string; content: string } | null
+}
+
+export interface PlaygroundCommentResult {
+  comments: PlaygroundCommentEntry[]
+}
+
+export interface PlaygroundLiveResult {
+  ok: boolean
+  error?: string
+  result?: Record<string, unknown>
+}

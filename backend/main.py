@@ -32,6 +32,7 @@ from config import (
 )
 from agent_runner import AgentRunner, get_prompt_log
 from moltbook_client import MoltbookClient
+from playground import PlaygroundRunner
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -766,6 +767,91 @@ async def delete_moltbook_agent(slot: int):
         del runners[slot]
     await db.delete_moltbook_config(app.state.db, slot)
     return {"ok": True}
+
+
+# ── Playground ────────────────────────────────────────────────────────────────
+
+
+class PlaygroundConfigOverride(BaseModel):
+    soul_md: Optional[str] = None
+    rules_md: Optional[str] = None
+    heartbeat_md: Optional[str] = None
+    messaging_md: Optional[str] = None
+    common_md: Optional[str] = None
+
+
+async def _make_playground_runner(slot: int, overrides: PlaygroundConfigOverride | None = None) -> PlaygroundRunner:
+    """Create a PlaygroundRunner for any configured agent (doesn't need to be running)."""
+    pool = app.state.db
+    row = await db.get_moltbook_config(pool, slot)
+    if not row or not row.get("api_key"):
+        raise HTTPException(status_code=400, detail="Agent not registered — no API key")
+    config = config_from_db(row)
+    common_md_override = None
+    if overrides:
+        if overrides.soul_md is not None:
+            config.soul_md = overrides.soul_md
+        if overrides.rules_md is not None:
+            config.rules_md = overrides.rules_md
+        if overrides.heartbeat_md is not None:
+            config.heartbeat_md = overrides.heartbeat_md
+        if overrides.messaging_md is not None:
+            config.messaging_md = overrides.messaging_md
+        if overrides.common_md is not None:
+            common_md_override = overrides.common_md
+    return PlaygroundRunner(config, pool, LLM_MANAGER_URL, _llm_api_key, common_md_override=common_md_override)
+
+
+@app.post("/api/agents/{slot}/playground/browse")
+async def playground_browse(slot: int, overrides: PlaygroundConfigOverride | None = None):
+    if slot not in range(1, 7):
+        raise HTTPException(status_code=404, detail="Slot must be 1-6")
+    runner = await _make_playground_runner(slot, overrides)
+    return await runner.browse()
+
+
+@app.post("/api/agents/{slot}/playground/post")
+async def playground_post(slot: int, overrides: PlaygroundConfigOverride | None = None):
+    if slot not in range(1, 7):
+        raise HTTPException(status_code=404, detail="Slot must be 1-6")
+    runner = await _make_playground_runner(slot, overrides)
+    return await runner.generate_post()
+
+
+@app.post("/api/agents/{slot}/playground/comment")
+async def playground_comment(slot: int, overrides: PlaygroundConfigOverride | None = None):
+    if slot not in range(1, 7):
+        raise HTTPException(status_code=404, detail="Slot must be 1-6")
+    runner = await _make_playground_runner(slot, overrides)
+    return await runner.generate_comments()
+
+
+class PlaygroundPostLiveRequest(BaseModel):
+    submolt: str
+    title: str
+    content: str
+
+
+@app.post("/api/agents/{slot}/playground/post-live")
+async def playground_post_live(slot: int, req: PlaygroundPostLiveRequest):
+    if slot not in range(1, 7):
+        raise HTTPException(status_code=404, detail="Slot must be 1-6")
+    runner = await _make_playground_runner(slot)
+    return await runner.post_live(req.submolt, req.title, req.content)
+
+
+class PlaygroundCommentLiveRequest(BaseModel):
+    post_id: str
+    content: str
+    parent_id: Optional[str] = None
+
+
+@app.post("/api/agents/{slot}/playground/comment-live")
+async def playground_comment_live(slot: int, req: PlaygroundCommentLiveRequest):
+    if slot not in range(1, 7):
+        raise HTTPException(status_code=404, detail="Slot must be 1-6")
+    runner = await _make_playground_runner(slot)
+    return await runner.comment_live(req.post_id, req.content, req.parent_id)
 
 
 # ── UAT database reset ────────────────────────────────────────────────────────

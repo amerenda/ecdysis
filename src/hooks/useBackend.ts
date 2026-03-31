@@ -1,5 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Agent, GpuInfo, OllamaModel, ActivityEntry, VramCheck } from '../types'
+import type {
+  Agent, GpuInfo, OllamaModel, ActivityEntry, VramCheck,
+  PlaygroundBrowseResult, PlaygroundPostResult, PlaygroundCommentResult, PlaygroundLiveResult,
+} from '../types'
 
 const BASE = ''  // nginx proxies /api to llm-manager backend
 
@@ -305,5 +308,49 @@ export function useResetDatabase() {
   return useMutation({
     mutationFn: () => post('/api/admin/reset-database'),
     onSuccess: () => qc.invalidateQueries(),
+  })
+}
+
+// ── Playground ─────────────────────────────────────────────────────────────
+
+export interface PlaygroundOverrides {
+  soul_md?: string
+  rules_md?: string
+  heartbeat_md?: string
+  messaging_md?: string
+}
+
+export function usePlaygroundBrowse() {
+  return useMutation({
+    mutationFn: ({ slot, overrides }: { slot: number; overrides?: PlaygroundOverrides }) =>
+      post<PlaygroundBrowseResult>(`/api/agents/${slot}/playground/browse`, overrides || {}),
+  })
+}
+
+export function usePlaygroundPost() {
+  return useMutation({
+    mutationFn: ({ slot, overrides }: { slot: number; overrides?: PlaygroundOverrides }) =>
+      post<PlaygroundPostResult>(`/api/agents/${slot}/playground/post`, overrides || {}),
+  })
+}
+
+export function usePlaygroundComment() {
+  return useMutation({
+    mutationFn: ({ slot, overrides }: { slot: number; overrides?: PlaygroundOverrides }) =>
+      post<PlaygroundCommentResult>(`/api/agents/${slot}/playground/comment`, overrides || {}),
+  })
+}
+
+export function usePlaygroundPostLive() {
+  return useMutation({
+    mutationFn: ({ slot, submolt, title, content }: { slot: number; submolt: string; title: string; content: string }) =>
+      post<PlaygroundLiveResult>(`/api/agents/${slot}/playground/post-live`, { submolt, title, content }),
+  })
+}
+
+export function usePlaygroundCommentLive() {
+  return useMutation({
+    mutationFn: ({ slot, post_id, content, parent_id }: { slot: number; post_id: string; content: string; parent_id?: string }) =>
+      post<PlaygroundLiveResult>(`/api/agents/${slot}/playground/comment-live`, { post_id, content, parent_id }),
   })
 }
