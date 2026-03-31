@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Loader2, Send, MessageSquare, ThumbsUp, Save, AlertCircle, Check, Eye, RotateCcw } from 'lucide-react'
 import {
   useAgents, useModels, useUpdateAgent, useCommonConfig, useUpdateCommonConfig,
@@ -240,6 +240,7 @@ export function Playground() {
   const [activeAction, setActiveAction] = useState<'browse' | 'post' | 'comment' | null>(null)
   const [modelReady, setModelReady] = useState(false)
   const [warmingModel, setWarmingModel] = useState(false)
+  const warmGenRef = useRef(0)  // generation counter to ignore stale warm callbacks
 
   const warm = usePlaygroundWarm()
   const browse = usePlaygroundBrowse()
@@ -253,14 +254,19 @@ export function Playground() {
   useEffect(() => {
     if (selectedAgent) {
       loadFromAgent(selectedAgent)
-      setModelReady(false)
-      setWarmingModel(true)
-      warm.mutate({ slot: selectedAgent.slot }, {
-        onSuccess: () => { setModelReady(true); setWarmingModel(false) },
-        onError: () => { setWarmingModel(false) },
-      })
+      warmModel(selectedAgent.slot)
     }
   }, [selectedSlot])
+
+  function warmModel(slot: number, model?: string) {
+    const gen = ++warmGenRef.current
+    setModelReady(false)
+    setWarmingModel(true)
+    warm.mutate({ slot, model }, {
+      onSuccess: () => { if (warmGenRef.current === gen) { setModelReady(true); setWarmingModel(false) } },
+      onError: () => { if (warmGenRef.current === gen) { setWarmingModel(false) } },
+    })
+  }
 
   function loadFromAgent(agent: Agent) {
     setEditedFiles({
@@ -292,15 +298,7 @@ export function Playground() {
   function handleModelChange(model: string) {
     setSelectedModel(model)
     setHasEdits(true)
-    // Warm the new model
-    if (selectedSlot) {
-      setModelReady(false)
-      setWarmingModel(true)
-      warm.mutate({ slot: selectedSlot, model }, {
-        onSuccess: () => { setModelReady(true); setWarmingModel(false) },
-        onError: () => { setWarmingModel(false) },
-      })
-    }
+    if (selectedSlot) warmModel(selectedSlot, model)
   }
 
   function getOverrides() {
