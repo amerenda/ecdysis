@@ -65,6 +65,7 @@ const ACTION_COLORS: Record<string, string> = {
 }
 
 const SKIPPED_ACTIONS = new Set(['skipped_reply', 'skipped_comment', 'skipped_thread', 'skipped_post', 'skipped_peer_comment'])
+const DEBUG_ACTIONS = new Set(['debug_prompt'])
 
 // ── API Key inline editor ────────────────────────────────────────────────────
 
@@ -668,6 +669,7 @@ export function AgentDetail() {
 
   const [tab, setTab] = useState<'activity' | 'config' | 'files' | 'posts'>('activity')
   const [activityFilter, setActivityFilter] = useState<'all' | 'actions' | 'skipped'>('all')
+  const [showDebug, setShowDebug] = useState(false)
   const [showClaim, setShowClaim] = useState(false)
   const [dismissedErrorTs, setDismissedErrorTs] = useState<string | null>(null)
 
@@ -945,6 +947,7 @@ export function AgentDetail() {
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
         {tab === 'activity' && (() => {
           const filtered = (activity.data ?? []).filter((e: ActivityEntry) => {
+            if (!showDebug && DEBUG_ACTIONS.has(e.action)) return false
             if (activityFilter === 'all') return true
             if (activityFilter === 'skipped') return SKIPPED_ACTIONS.has(e.action)
             return !SKIPPED_ACTIONS.has(e.action) // 'actions'
@@ -973,6 +976,14 @@ export function AgentDetail() {
                       </button>
                     ))}
                   </div>
+                  <button
+                    onClick={() => setShowDebug(d => !d)}
+                    className={`text-[10px] px-2 py-1 rounded-md transition-colors ${
+                      showDebug ? 'bg-gray-700 text-gray-200' : 'text-gray-600 hover:text-gray-400'
+                    }`}
+                  >
+                    Debug
+                  </button>
                   {activity.isFetching && <RefreshCw className="w-3.5 h-3.5 text-gray-600 animate-spin" />}
                 </div>
               </div>
