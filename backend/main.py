@@ -811,12 +811,11 @@ class PlaygroundWarmRequest(BaseModel):
 
 @app.post("/api/agents/{slot}/playground/warm")
 async def playground_warm(slot: int, req: PlaygroundWarmRequest | None = None):
-    """Pre-load the agent's model into VRAM. Call before browse/post/comment."""
+    """No-op — model loading is now handled by the llm-manager queue scheduler."""
     if slot not in range(1, 7):
         raise HTTPException(status_code=404, detail="Slot must be 1-6")
     overrides = PlaygroundConfigOverride(model=req.model) if req and req.model else None
     runner = await _make_playground_runner(slot, overrides)
-    await runner.ensure_model_loaded()
     return {"ok": True, "model": runner.config.model}
 
 

@@ -14,6 +14,7 @@ from config import (
     AgentConfig, AgentState, PeerDatabase, PeerPost,
     config_from_db, state_from_db,
 )
+from llm_queue import queue_chat
 from moltbook_client import MoltbookClient, DryRunMoltbookClient, RateLimitedError
 
 logger = logging.getLogger(__name__)
@@ -120,29 +121,23 @@ class AgentRunner:
             sys_prompt[:500], prompt[:500],
         )
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=120)) as http:
-                r = await http.post(
-                    f"{self.llm_base}/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {self.llm_api_key}"},
-                    json={
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": sys_prompt},
-                            {"role": "user", "content": prompt},
-                        ],
-                        "stream": False,
-                    },
-                )
-                r.raise_for_status()
-                content = r.json()["choices"][0]["message"]["content"].strip()
-                # Strip deepseek-r1 thinking tags if present
-                if "<think>" in content:
-                    content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
-                logger.debug("[agent-%d] LLM response (%d chars): %s", self.slot, len(content), content[:500])
-                _record_prompt(self.slot, model, sys_prompt, prompt, content)
-                return content
-        except httpx.ReadTimeout:
-            logger.warning("LLM timeout slot %d (model=%s, prompt=%d chars)", self.slot, model, len(prompt))
+            result = await queue_chat(
+                self.llm_base, self.llm_api_key, model,
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                metadata={"source": "ecdysis", "slot": self.slot},
+            )
+            content = result["choices"][0]["message"]["content"].strip()
+            # Strip deepseek-r1 thinking tags if present
+            if "<think>" in content:
+                content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+            logger.debug("[agent-%d] LLM response (%d chars): %s", self.slot, len(content), content[:500])
+            _record_prompt(self.slot, model, sys_prompt, prompt, content)
+            return content
+        except TimeoutError:
+            logger.warning("LLM queue timeout slot %d (model=%s, prompt=%d chars)", self.slot, model, len(prompt))
             _record_prompt(self.slot, model, sys_prompt, prompt, "[TIMEOUT]")
             return ""
         except Exception as e:
