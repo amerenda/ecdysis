@@ -1,15 +1,14 @@
-"""Submit LLM calls via llm-manager's queue API instead of direct /v1/chat/completions."""
+"""Submit LLM calls via llm-manager's queue API, wait via SSE stream."""
 
-import asyncio
+import json
 import logging
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
-# Poll interval and timeout for waiting on queue jobs
-POLL_INTERVAL = 1.0  # seconds
-POLL_TIMEOUT = 300   # 5 minutes max wait
+# Timeout for the full SSE wait (submit + model load + inference)
+SSE_TIMEOUT = 300  # 5 minutes
 
 
 async def queue_chat(
@@ -19,17 +18,17 @@ async def queue_chat(
     messages: list[dict],
     metadata: dict | None = None,
 ) -> dict:
-    """Submit a chat completion job to the queue and wait for the result.
+    """Submit a chat completion job to the queue and wait for the result via SSE.
 
     Returns the OpenAI-format result dict (with choices, usage, etc.),
     or raises on failure/timeout.
     """
-    submit_url = f"{llm_base}/api/queue/submit"
     headers = {"Authorization": f"Bearer {api_key}"}
 
+    # Submit job
     async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=30)) as http:
         r = await http.post(
-            submit_url,
+            f"{llm_base}/api/queue/submit",
             headers=headers,
             json={
                 "model": model,
@@ -42,25 +41,27 @@ async def queue_chat(
         job = r.json()
 
     job_id = job["job_id"]
-    status_url = f"{llm_base}/api/queue/jobs/{job_id}"
     logger.debug("Queued job %s (model=%s, position=%s)", job_id, model, job.get("position"))
 
-    # Poll until complete
-    elapsed = 0.0
-    async with httpx.AsyncClient(timeout=10) as http:
-        while elapsed < POLL_TIMEOUT:
-            await asyncio.sleep(POLL_INTERVAL)
-            elapsed += POLL_INTERVAL
+    # Wait for completion via SSE stream
+    wait_url = f"{llm_base}/api/queue/jobs/{job_id}/wait"
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=SSE_TIMEOUT)) as http:
+        async with http.stream("GET", wait_url, headers=headers) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data = json.loads(line[6:])
 
-            r = await http.get(status_url, headers=headers)
-            r.raise_for_status()
-            data = r.json()
-            status = data["status"]
+                if "error" in data and "status" not in data:
+                    raise RuntimeError(f"Queue job {job_id}: {data['error']}")
 
-            if status == "completed":
-                return data["result"]
-            elif status in ("failed", "cancelled"):
-                error = data.get("error", "unknown error")
-                raise RuntimeError(f"Queue job {job_id} {status}: {error}")
+                status = data.get("status")
+                if status == "completed":
+                    return data["result"]
+                elif status in ("failed", "cancelled"):
+                    error = data.get("error", "unknown error")
+                    raise RuntimeError(f"Queue job {job_id} {status}: {error}")
+                # queued, loading_model, running — keep waiting
 
-    raise TimeoutError(f"Queue job {job_id} timed out after {POLL_TIMEOUT}s")
+    raise TimeoutError(f"Queue job {job_id} SSE stream ended without result")
