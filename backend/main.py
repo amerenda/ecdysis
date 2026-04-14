@@ -162,6 +162,32 @@ async def _try_acquire_agent_lock(conn: asyncpg.Connection, slot: int) -> bool:
     return row["acquired"]
 
 
+async def _release_stale_advisory_locks(pool: asyncpg.Pool, lock_conn: asyncpg.Connection):
+    """Terminate PG sessions holding our advisory locks that aren't ours.
+
+    When the backend container restarts but cloud-sql-proxy keeps the old PG
+    session alive, advisory locks from the dead process persist. This finds
+    those sessions and terminates them so the new process can acquire the locks.
+    """
+    my_pid = await lock_conn.fetchval("SELECT pg_backend_pid()")
+    rows = await pool.fetch("""
+        SELECT l.pid, l.classid, l.objid
+        FROM pg_locks l
+        WHERE l.locktype = 'advisory'
+          AND l.classid = $1
+          AND l.pid != $2
+          AND l.granted = true
+    """, LOCK_NAMESPACE, my_pid)
+    if not rows:
+        return
+    stale_pids = set(r["pid"] for r in rows)
+    for pid in stale_pids:
+        logger.warning("Terminating stale advisory lock holder (pid=%d)", pid)
+        await pool.execute("SELECT pg_terminate_backend($1)", pid)
+    if stale_pids:
+        await asyncio.sleep(1)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _lock_conn
@@ -190,8 +216,11 @@ async def lifespan(app: FastAPI):
     _lock_conn = await asyncpg.connect(DATABASE_URL)
     logger.info("Advisory lock connection established")
 
+    # Terminate stale PG sessions holding our advisory locks (e.g. from
+    # container restarts where cloud-sql-proxy kept the old session alive)
+    await _release_stale_advisory_locks(pool, _lock_conn)
+
     # Auto-start enabled agents, acquiring advisory locks first
-    # Retry lock acquisition — old pod's locks may take a few seconds to release
     unacquired = []
     for row in await db.get_all_moltbook_configs(pool):
         if row["enabled"] and row["api_key"]:
