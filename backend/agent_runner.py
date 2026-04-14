@@ -19,6 +19,16 @@ from moltbook_client import MoltbookClient, DryRunMoltbookClient, RateLimitedErr
 
 logger = logging.getLogger(__name__)
 
+# Lazy import to avoid circular — metrics are defined in main.py
+_metrics = None
+
+def _get_metrics():
+    global _metrics
+    if _metrics is None:
+        import main as _main
+        _metrics = _main
+    return _metrics
+
 DEFAULT_HEARTBEAT_INTERVAL = 30 * 60  # 30 min fallback
 
 # In-memory ring buffer for recent LLM prompts (lost on restart)
@@ -120,6 +130,8 @@ class AgentRunner:
             self.slot, model, len(sys_prompt), len(prompt),
             sys_prompt[:500], prompt[:500],
         )
+        m = _get_metrics()
+        t0 = time.time()
         try:
             result = await queue_chat(
                 self.llm_base, self.llm_api_key, model,
@@ -129,18 +141,22 @@ class AgentRunner:
                 ],
                 metadata={"source": "ecdysis", "slot": self.slot},
             )
+            elapsed = time.time() - t0
+            m.moltbook_llm_calls_total.labels(slot=str(self.slot), status="success").inc()
+            m.moltbook_llm_call_seconds.labels(slot=str(self.slot)).observe(elapsed)
             content = result["choices"][0]["message"]["content"].strip()
-            # Strip deepseek-r1 thinking tags if present
             if "<think>" in content:
                 content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
             logger.debug("[agent-%d] LLM response (%d chars): %s", self.slot, len(content), content[:500])
             _record_prompt(self.slot, model, sys_prompt, prompt, content)
             return content
         except TimeoutError:
+            m.moltbook_llm_calls_total.labels(slot=str(self.slot), status="timeout").inc()
             logger.warning("LLM queue timeout slot %d (model=%s, prompt=%d chars)", self.slot, model, len(prompt))
             _record_prompt(self.slot, model, sys_prompt, prompt, "[TIMEOUT]")
             return ""
         except Exception as e:
+            m.moltbook_llm_calls_total.labels(slot=str(self.slot), status="error").inc()
             logger.error("LLM error slot %d: %s (%s)", self.slot, type(e).__name__, e)
             _record_prompt(self.slot, model, sys_prompt, prompt, f"[ERROR: {e}]")
             return ""
@@ -305,6 +321,8 @@ class AgentRunner:
             self._dry_run = False
 
     async def _run_heartbeat_inner(self):
+        m = _get_metrics()
+        hb_t0 = time.time()
         # Clear cached common_md so it reloads each heartbeat
         if hasattr(self, '_common_md_cache'):
             del self._common_md_cache
@@ -392,18 +410,24 @@ class AgentRunner:
             # Update memory with what happened this heartbeat
             await self._update_memory()
 
+            m.moltbook_heartbeat_total.labels(slot=str(self.slot), status="success").inc()
+            m.moltbook_heartbeat_duration_seconds.labels(slot=str(self.slot)).observe(time.time() - hb_t0)
             await self.log("heartbeat", f"Done — karma: {self.state.karma}")
         except RateLimitedError as e:
+            m.moltbook_heartbeat_total.labels(slot=str(self.slot), status="rate_limited").inc()
             self.state.rate_limited_until = e.reset_at
             await db.upsert_moltbook_state(self.pool, self.slot, rate_limited_until=e.reset_at)
             await self.log("rate_limited", f"Rate limited until {e.reset_at.isoformat()} ({e.retry_after}s)")
             logger.warning("Agent %d rate limited until %s", self.slot, e.reset_at)
         except httpx.HTTPStatusError as e:
+            m.moltbook_heartbeat_total.labels(slot=str(self.slot), status="error").inc()
+            m.moltbook_moltbook_api_errors_total.labels(slot=str(self.slot), status_code=str(e.response.status_code)).inc()
             body = e.response.text[:300] if e.response else ""
             detail = f"{e.response.status_code} {e.response.reason_phrase} on {e.request.url.path} — {body}"
             logger.error("Heartbeat error slot %d: %s", self.slot, detail)
             await self.log("error", detail)
         except Exception as e:
+            m.moltbook_heartbeat_total.labels(slot=str(self.slot), status="error").inc()
             detail = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
             logger.error("Heartbeat error slot %d: %s", self.slot, detail)
             await self.log("error", detail)
@@ -914,6 +938,7 @@ class AgentRunner:
             post_id = ""
             if isinstance(result, dict):
                 post_id = result.get("id", "") or result.get("post", {}).get("id", "")
+            _get_metrics().moltbook_posts_total.labels(slot=str(self.slot)).inc()
             await self.log("posted", f"New post: '{title}' → m/{submolt} [{post_id}]")
             await db.record_post(self.pool, self.slot, title)
         except httpx.HTTPStatusError as e:
