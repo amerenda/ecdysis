@@ -400,6 +400,7 @@ async def get_moltbook_agents():
             "llm_runner_id": row.get("llm_runner_id"),
             "running": row["slot"] in runners and runners[row["slot"]].running,
             "dry_run_mode": row["slot"] in runners and runners[row["slot"]].dry_run_mode,
+            "llm_status": runners[row["slot"]].llm_status if row["slot"] in runners else "idle",
             "soul_md": row.get("soul_md", ""),
             "heartbeat_md": row.get("heartbeat_md", ""),
             "messaging_md": row.get("messaging_md", ""),
@@ -476,6 +477,22 @@ async def update_moltbook_agent(slot: int, req: AgentUpdateRequest):
     if req.enabled is not None:
         updates["enabled"] = req.enabled
     if req.model is not None:
+        if _llm_api_key:
+            try:
+                async with httpx.AsyncClient(timeout=10) as http:
+                    r = await http.get(
+                        f"{LLM_MANAGER_URL}/api/models",
+                        headers={"Authorization": f"Bearer {_llm_api_key}"},
+                    )
+                    r.raise_for_status()
+                    available = {m["name"] for m in r.json()}
+                    if req.model not in available:
+                        raise HTTPException(
+                            status_code=422,
+                            detail=f"Model '{req.model}' not available on any runner",
+                        )
+            except httpx.HTTPError:
+                pass  # can't reach llm-manager, allow optimistically
         updates["model"] = req.model
     if req.llm_runner_id is not None:
         updates["llm_runner_id"] = req.llm_runner_id

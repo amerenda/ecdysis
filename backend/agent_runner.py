@@ -79,6 +79,8 @@ class AgentRunner:
         self._lock_conn = lock_conn
         self._dry_run = False
         self.dry_run_mode = False  # persistent toggle for heartbeat loop
+        self.llm_status = "idle"  # idle, queued, loading_model, running
+        self.llm_job_id: str | None = None
 
     async def log(self, action: str, detail: str):
         await db.append_moltbook_activity(self.pool, self.slot, action, detail)
@@ -132,6 +134,12 @@ class AgentRunner:
         )
         m = _get_metrics()
         t0 = time.time()
+
+        def _on_status(job_id: str, status: str):
+            self.llm_job_id = job_id
+            self.llm_status = status
+
+        self.llm_status = "queued"
         try:
             result = await queue_chat(
                 self.llm_base, self.llm_api_key, model,
@@ -140,6 +148,7 @@ class AgentRunner:
                     {"role": "user", "content": prompt},
                 ],
                 metadata={"source": "ecdysis", "slot": self.slot},
+                on_status=_on_status,
             )
             elapsed = time.time() - t0
             m.moltbook_llm_calls_total.labels(slot=str(self.slot), status="success").inc()
@@ -160,6 +169,9 @@ class AgentRunner:
             logger.error("LLM error slot %d: %s (%s)", self.slot, type(e).__name__, e)
             _record_prompt(self.slot, model, sys_prompt, prompt, f"[ERROR: {e}]")
             return ""
+        finally:
+            self.llm_status = "idle"
+            self.llm_job_id = None
 
     async def _solve_challenge(self, problem: str) -> str:
         answer = await self._llm(

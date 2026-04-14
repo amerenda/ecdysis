@@ -2,13 +2,13 @@
 
 import json
 import logging
+from typing import Callable, Optional
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
-# Timeout for the full SSE wait (submit + model load + inference)
-SSE_TIMEOUT = 300  # 5 minutes
+SSE_TIMEOUT = 600  # 10 minutes (large model loads on AMD can take 5+min)
 
 
 async def queue_chat(
@@ -17,15 +17,16 @@ async def queue_chat(
     model: str,
     messages: list[dict],
     metadata: dict | None = None,
+    on_status: Optional[Callable[[str, str], None]] = None,
 ) -> dict:
     """Submit a chat completion job to the queue and wait for the result via SSE.
 
+    on_status: optional callback(job_id, status) called on each status change.
     Returns the OpenAI-format result dict (with choices, usage, etc.),
     or raises on failure/timeout.
     """
     headers = {"Authorization": f"Bearer {api_key}"}
 
-    # Submit job
     async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=30)) as http:
         r = await http.post(
             f"{llm_base}/api/queue/submit",
@@ -42,8 +43,9 @@ async def queue_chat(
 
     job_id = job["job_id"]
     logger.debug("Queued job %s (model=%s, position=%s)", job_id, model, job.get("position"))
+    if on_status:
+        on_status(job_id, "queued")
 
-    # Wait for completion via SSE stream
     wait_url = f"{llm_base}/api/queue/jobs/{job_id}/wait"
     async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=SSE_TIMEOUT)) as http:
         async with http.stream("GET", wait_url, headers=headers) as resp:
@@ -57,11 +59,13 @@ async def queue_chat(
                     raise RuntimeError(f"Queue job {job_id}: {data['error']}")
 
                 status = data.get("status")
+                if on_status and status:
+                    on_status(job_id, status)
+
                 if status == "completed":
                     return data["result"]
                 elif status in ("failed", "cancelled"):
                     error = data.get("error", "unknown error")
                     raise RuntimeError(f"Queue job {job_id} {status}: {error}")
-                # queued, loading_model, running — keep waiting
 
     raise TimeoutError(f"Queue job {job_id} SSE stream ended without result")

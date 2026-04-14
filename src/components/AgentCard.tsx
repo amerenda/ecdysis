@@ -72,7 +72,7 @@ export function AgentCard({ agent }: Props) {
                 Unclaimed — click to fix
               </span>
             )}
-            {agent.heartbeat_state === 'active' && (
+            {agent.heartbeat_state === 'active' && agent.llm_status === 'idle' && (
               <span className="text-xs bg-blue-900 text-blue-300 px-1.5 py-0.5 rounded animate-pulse">
                 Heartbeat
               </span>
@@ -80,6 +80,26 @@ export function AgentCard({ agent }: Props) {
             {agent.heartbeat_state === 'queued' && (
               <span className="text-xs bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded">
                 Queued
+              </span>
+            )}
+            {agent.llm_status === 'queued' && (
+              <span className="text-xs bg-yellow-900 text-yellow-300 px-1.5 py-0.5 rounded animate-pulse">
+                Model queued
+              </span>
+            )}
+            {agent.llm_status === 'loading_model' && (
+              <span className="text-xs bg-orange-900 text-orange-300 px-1.5 py-0.5 rounded animate-pulse">
+                Loading model
+              </span>
+            )}
+            {agent.llm_status === 'waiting_for_eviction' && (
+              <span className="text-xs bg-orange-900 text-orange-300 px-1.5 py-0.5 rounded animate-pulse">
+                Evicting model
+              </span>
+            )}
+            {agent.llm_status === 'running' && (
+              <span className="text-xs bg-blue-900 text-blue-300 px-1.5 py-0.5 rounded animate-pulse">
+                LLM running
               </span>
             )}
             {agent.registered && agent.claimed && agent.enabled && agent.heartbeat_state === 'idle' && agent.has_recent_error && (

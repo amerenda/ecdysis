@@ -78,6 +78,7 @@ export interface Agent {
   claimed: boolean
   has_recent_error: boolean
   heartbeat_state: 'idle' | 'active' | 'queued'
+  llm_status: 'idle' | 'queued' | 'loading_model' | 'waiting_for_eviction' | 'running'
   running: boolean
   dry_run_mode: boolean
   soul_md: string
