@@ -119,18 +119,24 @@ class PlaygroundRunner:
         if common:
             system = f"--- Common Instructions ---\n{common}\n\n{system}"
         model = self.config.model
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ]
         try:
-            result = await queue_chat(
-                self.llm_base, self.llm_api_key, model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": prompt},
-                ],
-                metadata={"source": "ecdysis-playground", "slot": self.slot},
-            )
-            content = result["choices"][0]["message"]["content"].strip()
-            if "<think>" in content:
-                content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+            for attempt in range(2):
+                result = await queue_chat(
+                    self.llm_base, self.llm_api_key, model,
+                    messages=messages,
+                    metadata={"source": "ecdysis-playground", "slot": self.slot},
+                )
+                content = result["choices"][0]["message"]["content"].strip()
+                if "<think>" in content:
+                    content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+                if content:
+                    break
+                if attempt == 0:
+                    logger.info("[playground-%d] Think-only response, retrying", self.slot)
             return content
         except TimeoutError:
             logger.warning("Playground LLM queue timeout slot %d", self.slot)

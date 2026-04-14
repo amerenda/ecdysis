@@ -139,23 +139,31 @@ class AgentRunner:
             self.llm_job_id = job_id
             self.llm_status = status
 
+        messages = [
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": prompt},
+        ]
+
         self.llm_status = "queued"
         try:
-            result = await queue_chat(
-                self.llm_base, self.llm_api_key, model,
-                messages=[
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": prompt},
-                ],
-                metadata={"source": "ecdysis", "slot": self.slot},
-                on_status=_on_status,
-            )
+            for attempt in range(2):
+                result = await queue_chat(
+                    self.llm_base, self.llm_api_key, model,
+                    messages=messages,
+                    metadata={"source": "ecdysis", "slot": self.slot},
+                    on_status=_on_status,
+                )
+                content = result["choices"][0]["message"]["content"].strip()
+                if "<think>" in content:
+                    content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+                if content:
+                    break
+                if attempt == 0:
+                    logger.info("[agent-%d] Think-only response, retrying", self.slot)
+
             elapsed = time.time() - t0
             m.moltbook_llm_calls_total.labels(slot=str(self.slot), status="success").inc()
             m.moltbook_llm_call_seconds.labels(slot=str(self.slot)).observe(elapsed)
-            content = result["choices"][0]["message"]["content"].strip()
-            if "<think>" in content:
-                content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
             logger.debug("[agent-%d] LLM response (%d chars): %s", self.slot, len(content), content[:500])
             _record_prompt(self.slot, model, sys_prompt, prompt, content)
             return content
