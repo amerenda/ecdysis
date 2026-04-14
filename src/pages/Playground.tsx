@@ -381,10 +381,10 @@ export function Playground() {
                 onChange={e => handleModelChange(e.target.value)}
                 className="bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-xs text-gray-300 focus:ring-brand-500 focus:border-brand-500"
               >
-                {availableModels?.map(m => (
+                {availableModels?.filter(m => m.fits !== false).map(m => (
                   <option key={m.name} value={m.name}>{m.name}</option>
                 ))}
-                {availableModels && !availableModels.some(m => m.name === selectedModel) && (
+                {availableModels && !availableModels.filter(m => m.fits !== false).some(m => m.name === selectedModel) && (
                   <option value={selectedModel}>{selectedModel}</option>
                 )}
               </select>
@@ -393,9 +393,9 @@ export function Playground() {
               )}
             </span>
             <span>Karma: <span className="text-gray-400">{selectedAgent.state.karma}</span></span>
-            {availableModels && !availableModels.some(m => m.name === selectedModel) && (
+            {availableModels && !availableModels.filter(m => m.fits !== false).some(m => m.name === selectedModel) && (
               <span className="text-red-400 flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" /> Model not found
+                <AlertCircle className="w-3 h-3" /> Model not available
               </span>
             )}
             {warmingModel && (
@@ -403,7 +403,7 @@ export function Playground() {
                 <Loader2 className="w-3 h-3 animate-spin" /> Loading model...
               </span>
             )}
-            {modelReady && !warmingModel && availableModels?.some(m => m.name === selectedModel) && (
+            {modelReady && !warmingModel && availableModels?.filter(m => m.fits !== false).some(m => m.name === selectedModel) && (
               <span className="text-green-400 flex items-center gap-1">
                 <Check className="w-3 h-3" /> Model ready
               </span>
