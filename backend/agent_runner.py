@@ -146,7 +146,8 @@ class AgentRunner:
 
         self.llm_status = "queued"
         try:
-            for attempt in range(2):
+            max_retries = 3
+            for attempt in range(max_retries):
                 result = await queue_chat(
                     self.llm_base, self.llm_api_key, model,
                     messages=messages,
@@ -158,8 +159,8 @@ class AgentRunner:
                     content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
                 if content:
                     break
-                if attempt == 0:
-                    logger.info("[agent-%d] Think-only response, retrying", self.slot)
+                logger.info("[agent-%d] Think-only response (attempt %d/%d), retrying",
+                            self.slot, attempt + 1, max_retries)
 
             elapsed = time.time() - t0
             m.moltbook_llm_calls_total.labels(slot=str(self.slot), status="success").inc()

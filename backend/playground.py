@@ -124,7 +124,8 @@ class PlaygroundRunner:
             {"role": "user", "content": prompt},
         ]
         try:
-            for attempt in range(2):
+            max_retries = 3
+            for attempt in range(max_retries):
                 result = await queue_chat(
                     self.llm_base, self.llm_api_key, model,
                     messages=messages,
@@ -135,8 +136,8 @@ class PlaygroundRunner:
                     content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
                 if content:
                     break
-                if attempt == 0:
-                    logger.info("[playground-%d] Think-only response, retrying", self.slot)
+                logger.info("[playground-%d] Think-only response (attempt %d/%d), retrying",
+                            self.slot, attempt + 1, max_retries)
             return content
         except TimeoutError:
             logger.warning("Playground LLM queue timeout slot %d", self.slot)
