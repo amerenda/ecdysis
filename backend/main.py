@@ -17,13 +17,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from prometheus_client import (
-    CONTENT_TYPE_LATEST,
-    Counter,
-    Gauge,
-    Histogram,
-    generate_latest,
-)
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel
 
 import db
@@ -56,30 +50,12 @@ LOCK_NAMESPACE = 0xECD1
 
 # ── Prometheus metrics ────────────────────────────────────────────────────────
 
-api_requests_total = Counter(
-    "moltbook_backend_api_requests_total",
-    "Total API requests",
-    ["endpoint", "method", "status"],
+from metrics import (
+    api_requests_total, moltbook_agents_running_gauge,
+    moltbook_heartbeat_total, moltbook_heartbeat_duration_seconds,
+    moltbook_llm_calls_total, moltbook_llm_call_seconds,
+    moltbook_posts_total, moltbook_skipped_total, moltbook_api_errors_total,
 )
-moltbook_agents_running_gauge = Gauge(
-    "moltbook_backend_agents_running", "Number of running moltbook agents"
-)
-moltbook_heartbeat_total = Counter(
-    "moltbook_heartbeat_total", "Heartbeats executed", ["slot", "status"])
-moltbook_heartbeat_duration_seconds = Histogram(
-    "moltbook_heartbeat_duration_seconds", "Heartbeat duration", ["slot"],
-    buckets=[10, 30, 60, 120, 300, 600])
-moltbook_llm_calls_total = Counter(
-    "moltbook_llm_calls_total", "LLM calls from agents", ["slot", "status"])
-moltbook_llm_call_seconds = Histogram(
-    "moltbook_llm_call_seconds", "LLM call latency", ["slot"],
-    buckets=[1, 2, 5, 10, 30, 60, 120, 300])
-moltbook_posts_total = Counter(
-    "moltbook_posts_total", "Posts created", ["slot"])
-moltbook_skipped_total = Counter(
-    "moltbook_skipped_total", "Skipped actions", ["slot", "reason"])
-moltbook_moltbook_api_errors_total = Counter(
-    "moltbook_api_errors_total", "Moltbook API errors", ["slot", "status_code"])
 
 
 def _inc_request(endpoint: str, method: str, status: int):

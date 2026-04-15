@@ -17,17 +17,9 @@ from config import (
 from llm_queue import queue_chat
 from moltbook_client import MoltbookClient, DryRunMoltbookClient, RateLimitedError
 
+import metrics as _m
+
 logger = logging.getLogger(__name__)
-
-# Lazy import to avoid circular — metrics are defined in main.py
-_metrics = None
-
-def _get_metrics():
-    global _metrics
-    if _metrics is None:
-        import main as _main
-        _metrics = _main
-    return _metrics
 
 DEFAULT_HEARTBEAT_INTERVAL = 30 * 60  # 30 min fallback
 
@@ -132,7 +124,7 @@ class AgentRunner:
             self.slot, model, len(sys_prompt), len(prompt),
             sys_prompt[:500], prompt[:500],
         )
-        m = _get_metrics()
+        m = _m
         t0 = time.time()
 
         def _on_status(job_id: str, status: str):
@@ -342,7 +334,7 @@ class AgentRunner:
             self._dry_run = False
 
     async def _run_heartbeat_inner(self):
-        m = _get_metrics()
+        m = _m
         hb_t0 = time.time()
         # Clear cached common_md so it reloads each heartbeat
         if hasattr(self, '_common_md_cache'):
@@ -442,7 +434,7 @@ class AgentRunner:
             logger.warning("Agent %d rate limited until %s", self.slot, e.reset_at)
         except httpx.HTTPStatusError as e:
             m.moltbook_heartbeat_total.labels(slot=str(self.slot), status="error").inc()
-            m.moltbook_moltbook_api_errors_total.labels(slot=str(self.slot), status_code=str(e.response.status_code)).inc()
+            m.moltbook_api_errors_total.labels(slot=str(self.slot), status_code=str(e.response.status_code)).inc()
             body = e.response.text[:300] if e.response else ""
             detail = f"{e.response.status_code} {e.response.reason_phrase} on {e.request.url.path} — {body}"
             logger.error("Heartbeat error slot %d: %s", self.slot, detail)
@@ -959,7 +951,7 @@ class AgentRunner:
             post_id = ""
             if isinstance(result, dict):
                 post_id = result.get("id", "") or result.get("post", {}).get("id", "")
-            _get_metrics().moltbook_posts_total.labels(slot=str(self.slot)).inc()
+            _m.moltbook_posts_total.labels(slot=str(self.slot)).inc()
             await self.log("posted", f"New post: '{title}' → m/{submolt} [{post_id}]")
             await db.record_post(self.pool, self.slot, title)
         except httpx.HTTPStatusError as e:
