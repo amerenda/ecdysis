@@ -1061,6 +1061,14 @@ class AgentRunner:
                         continue
 
 
+                # Reload config from DB so schedule/model changes take effect
+                try:
+                    row = await db.get_moltbook_config(self.pool, self.slot)
+                    if row:
+                        self.config = config_from_db(row)
+                except Exception:
+                    pass  # use existing config on failure
+
                 if self.dry_run_mode:
                     await self.run_dry_heartbeat()
                 else:
