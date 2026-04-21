@@ -45,21 +45,28 @@ jobs:
     needs: [test, set-tag]
     if: github.event_name != 'pull_request'
     runs-on: arc-runner-set
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: frontend
+            image: amerenda/ecdysis-frontend
+            dockerfile: Dockerfile
+            context: .
+          - component: backend
+            image: amerenda/ecdysis-backend
+            dockerfile: backend/Dockerfile
+            context: backend
     steps:
       - uses: actions/checkout@v6
 
       - name: Login to Docker Hub
         run: echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
 
-      - name: Build and push frontend (amd64)
+      - name: Build and push ${{ matrix.component }} (amd64)
         run: |
-          docker build -t "amerenda/ecdysis-frontend:${{ needs.set-tag.outputs.tag }}-amd64" .
-          docker push "amerenda/ecdysis-frontend:${{ needs.set-tag.outputs.tag }}-amd64"
-
-      - name: Build and push backend (amd64)
-        run: |
-          docker build -t "amerenda/ecdysis-backend:${{ needs.set-tag.outputs.tag }}-amd64" -f backend/Dockerfile backend
-          docker push "amerenda/ecdysis-backend:${{ needs.set-tag.outputs.tag }}-amd64"
+          docker build -t "${{ matrix.image }}:${{ needs.set-tag.outputs.tag }}-amd64" -f ${{ matrix.dockerfile }} ${{ matrix.context }}
+          docker push "${{ matrix.image }}:${{ needs.set-tag.outputs.tag }}-amd64"
 
   build-arm64:
     needs: [test, set-tag]
